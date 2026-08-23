@@ -131,12 +131,25 @@ function drawGraph(commits, laneCount) {
     const curr = commits[i + 1];
     const y1 = rowMid(i);
     const y2 = rowMid(i + 1);
+    const joinSet = new Set(curr.joins || []);
     const drawnFrom = new Set();
     const takenDest = new Set();
 
     for (const e of prev.edges || []) {
       const from = e.from_lane;
       const to = e.to_lane;
+      if (joinSet.has(from)) {
+        strokePipe(
+          laneX(from),
+          y1,
+          laneX(curr.lane),
+          y2,
+          color(from),
+          "round"
+        );
+        drawnFrom.add(from);
+        continue;
+      }
       const stroke = color(e.kind === "merge" ? to : from);
       if (from === to) {
         addVert(from, y1, y2);
@@ -152,7 +165,9 @@ function drawGraph(commits, laneCount) {
       drawnFrom.add(j);
     }
     for (const lane of prev.through || []) {
-      if (drawnFrom.has(lane) || takenDest.has(lane)) continue;
+      if (drawnFrom.has(lane) || takenDest.has(lane) || joinSet.has(lane)) {
+        continue;
+      }
       addVert(lane, y1, y2);
     }
   }
