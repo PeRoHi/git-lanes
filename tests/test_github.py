@@ -29,6 +29,17 @@ class GithubNameTest(unittest.TestCase):
         self.assertEqual(normalize_github_name("PeRoHi/git-lanes"), want)
         self.assertEqual(normalize_github_name(""), "")
 
+    def test_parse_login_banner(self):
+        from git_lanes.github import DEVICE_URL, parse_login_banner
+
+        code, uri = parse_login_banner(
+            "\n! First copy your one-time code: 775E-0C89\n"
+            "Open this URL to continue in your web browser: https://github.com/login/device\n"
+        )
+        self.assertEqual(code, "775E-0C89")
+        self.assertEqual(uri, DEVICE_URL)
+        self.assertEqual(parse_login_banner(""), ("", ""))
+
     def test_status_without_login(self):
         from git_lanes.github import status
 

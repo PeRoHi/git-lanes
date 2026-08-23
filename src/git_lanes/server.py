@@ -11,6 +11,7 @@ from git_lanes import HOST, INITIAL_LOAD, LOAD_MORE, PORT
 from git_lanes.discover import open_user_path, scan_and_merge
 from git_lanes.github import clone_named, fetch_named, list_remote_repos
 from git_lanes.github import logout as github_logout
+from git_lanes.github import open_device_page
 from git_lanes.github import start_login as github_start_login
 from git_lanes.github import status as github_status
 from git_lanes.gitio import GitError, is_work_tree, load_commit, load_graph
@@ -141,6 +142,9 @@ def _handle_api(method: str, parsed, body: bytes):
 
     if path == "/api/github/login" and method == "POST":
         return _json_bytes(github_start_login())
+
+    if path == "/api/github/open" and method == "POST":
+        return _json_bytes(open_device_page())
 
     if path == "/api/github/logout" and method == "POST":
         return _json_bytes(github_logout())

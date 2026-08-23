@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Git Lanes</title>
-  <link rel="stylesheet" href="/style.css?v=8">
+  <link rel="stylesheet" href="/style.css?v=9">
 </head>
 <body>
   <header class="bar">
@@ -32,6 +32,10 @@
       <button type="button" id="ghCloseBtn">Close</button>
     </div>
     <p id="ghHint" class="muted gh-hint"></p>
+    <div id="ghCodeWrap" class="gh-code-row hidden">
+      <div id="ghCode" class="gh-code"></div>
+      <button type="button" id="ghOpenDeviceBtn">Open GitHub</button>
+    </div>
     <div id="ghList" class="gh-list"></div>
   </section>
 
@@ -70,6 +74,6 @@
     <div id="detailBody"></div>
   </aside>
 
-  <script src="/app.js?v=8"></script>
+  <script src="/app.js?v=9"></script>
 </body>
 </html>

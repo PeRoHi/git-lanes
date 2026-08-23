@@ -81,6 +81,21 @@ html, body {
   margin: 0 12px 8px;
 }
 
+.gh-code-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px 12px;
+}
+
+.gh-code {
+  font: 28px/1.2 Consolas, "Cascadia Mono", monospace;
+  letter-spacing: 0.14em;
+  padding: 8px 14px;
+  background: #111;
+  border: 1px solid var(--border);
+}
+
 .gh-list {
   padding: 0 12px 12px;
 }

@@ -395,6 +395,22 @@ async function findRepos() {
   }
 }
 
+function showGhCode(code, uri) {
+  const wrap = $("ghCodeWrap");
+  const el = $("ghCode");
+  if (code) {
+    el.textContent = code;
+    wrap.classList.remove("hidden");
+    $("ghHint").textContent =
+      "Type this code on GitHub, then come back. A browser window should have opened (" +
+      (uri || "github.com/login/device") +
+      ").";
+  } else {
+    el.textContent = "";
+    wrap.classList.add("hidden");
+  }
+}
+
 function renderGhStatus(st) {
   const label = $("ghStatus");
   const loginBtn = $("ghLoginBtn");
@@ -405,6 +421,7 @@ function renderGhStatus(st) {
     loginBtn.classList.add("hidden");
     logoutBtn.classList.add("hidden");
     header.textContent = "GitHub";
+    showGhCode("", "");
     $("ghHint").textContent = "Install gh from " + (st.install_url || "https://cli.github.com/");
     return;
   }
@@ -413,11 +430,13 @@ function renderGhStatus(st) {
     loginBtn.classList.add("hidden");
     logoutBtn.classList.remove("hidden");
     header.textContent = "@" + st.user;
+    showGhCode("", "");
   } else {
     label.textContent = "GitHub: signed out";
     loginBtn.classList.remove("hidden");
     logoutBtn.classList.add("hidden");
     header.textContent = "GitHub";
+    showGhCode(st.user_code || "", st.verification_uri || "");
   }
 }
 
@@ -479,7 +498,7 @@ async function refreshGithub(loadList) {
     renderGhList(data);
   } else if (!st.logged_in) {
     $("ghList").innerHTML = "";
-    if (st.gh_ok) {
+    if (st.gh_ok && !st.user_code) {
       $("ghHint").textContent =
         "Sign in to list your GitHub repos and add missing clones. The graph itself stays local.";
     }
@@ -504,8 +523,10 @@ async function githubLogin() {
       await refreshGithub(true);
       return;
     }
-    $("ghHint").textContent =
-      "A console and browser opened. Finish GitHub sign-in, then this list will fill in.";
+    showGhCode(data.user_code || "", data.verification_uri || "");
+    if (!data.user_code) {
+      $("ghHint").textContent = "Starting GitHub sign-in...";
+    }
     if (state.ghWait) clearInterval(state.ghWait);
     let n = 0;
     state.ghWait = setInterval(async () => {
@@ -607,6 +628,13 @@ $("emptyGhBtn").addEventListener("click", () => {
   githubLogin();
 });
 $("ghLoginBtn").addEventListener("click", githubLogin);
+$("ghOpenDeviceBtn").addEventListener("click", async () => {
+  try {
+    await api("/api/github/open", { method: "POST" });
+  } catch (err) {
+    showError(String(err.message || err));
+  }
+});
 $("ghLogoutBtn").addEventListener("click", githubLogout);
 $("ghFetchBtn").addEventListener("click", githubFetch);
 $("ghCloseBtn").addEventListener("click", () => $("ghPanel").classList.add("hidden"));

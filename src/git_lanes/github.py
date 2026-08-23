@@ -6,6 +6,9 @@ import os
 import re
 import shutil
 import subprocess
+import threading
+import time
+import webbrowser
 from pathlib import Path
 
 from git_lanes.discover import APP_ROOT, candidate_roots
@@ -14,11 +17,21 @@ from git_lanes.store import resolve_repo, upsert_repo, visible_repos
 
 log = logging.getLogger("git_lanes.github")
 
-CREATE_NEW_CONSOLE = 0x00000010
 CREATE_NO_WINDOW = 0x08000000
 INSTALL_URL = "https://cli.github.com/"
+DEVICE_URL = "https://github.com/login/device"
+CODE_RE = re.compile(r"one-time code:\s*([A-Z0-9]{4}-[A-Z0-9]{4})", re.I)
+URI_RE = re.compile(r"https://github\.com/login/device[^\s]*")
 
 _GH_EXE: str | None = None
+_login_lock = threading.Lock()
+_login = {
+    "proc": None,
+    "user_code": "",
+    "verification_uri": "",
+    "error": "",
+    "lines": [],
+}
 
 
 def gh_exe() -> str:
@@ -74,6 +87,92 @@ def _run_gh(args: list[str], timeout: int = 60, *, hide: bool = True) -> str:
     return proc.stdout
 
 
+def parse_login_banner(text: str) -> tuple[str, str]:
+    code = ""
+    uri = ""
+    for match in CODE_RE.finditer(text or ""):
+        code = match.group(1).upper()
+    for match in URI_RE.finditer(text or ""):
+        uri = match.group(0).rstrip(".,)>")
+    return code, uri or (DEVICE_URL if code else "")
+
+
+def _login_snapshot() -> dict:
+    proc = _login["proc"]
+    pending = bool(proc is not None and proc.poll() is None)
+    return {
+        "login_pending": pending,
+        "user_code": _login["user_code"] if pending else "",
+        "verification_uri": _login["verification_uri"] if pending else "",
+        "login_error": _login["error"] if not pending else "",
+    }
+
+
+def _kill_login() -> None:
+    with _login_lock:
+        proc = _login["proc"]
+        _login["proc"] = None
+        _login["user_code"] = ""
+        _login["verification_uri"] = ""
+        _login["error"] = ""
+        _login["lines"] = []
+    if proc is None or proc.poll() is not None:
+        return
+    try:
+        proc.terminate()
+        proc.wait(timeout=3)
+    except Exception:
+        try:
+            proc.kill()
+        except OSError:
+            pass
+
+
+def _open_system_browser(url: str) -> None:
+    try:
+        webbrowser.open(url, new=2)
+    except Exception:
+        log.exception("open browser %s", url)
+
+
+def _consume_login(proc: subprocess.Popen) -> None:
+    buf = ""
+    try:
+        assert proc.stderr is not None
+        for line in proc.stderr:
+            buf += line
+            with _login_lock:
+                _login["lines"].append(line)
+                code, uri = parse_login_banner(buf)
+                if code:
+                    _login["user_code"] = code
+                if uri:
+                    _login["verification_uri"] = uri
+        rc = proc.wait()
+        with _login_lock:
+            if rc == 0:
+                _login["error"] = ""
+            else:
+                _login["error"] = buf.strip()[-500:] or "GitHub login did not finish"
+        if rc == 0:
+            try:
+                _run_gh(["auth", "setup-git"])
+            except GitError:
+                log.exception("gh auth setup-git")
+    except Exception as exc:
+        log.exception("login reader")
+        with _login_lock:
+            _login["error"] = str(exc)
+
+
+def open_device_page() -> dict:
+    with _login_lock:
+        uri = _login["verification_uri"] or DEVICE_URL
+        code = _login["user_code"]
+    _open_system_browser(uri)
+    return {"ok": True, "verification_uri": uri, "user_code": code}
+
+
 def normalize_github_name(url: str) -> str:
     raw = (url or "").strip()
     if not raw:
@@ -111,18 +210,21 @@ def status() -> dict:
     try:
         exe = gh_exe()
     except GitError as exc:
-        return {
+        st = {
             "gh_ok": False,
             "logged_in": False,
             "user": "",
             "install_url": INSTALL_URL,
             "error": str(exc),
         }
+        with _login_lock:
+            st.update(_login_snapshot())
+        return st
     try:
         raw = _run_gh(["api", "user"])
         data = json.loads(raw)
         login = str(data.get("login") or "")
-        return {
+        st = {
             "gh_ok": True,
             "logged_in": bool(login),
             "user": login,
@@ -134,7 +236,7 @@ def status() -> dict:
         msg = str(exc)
         if "gh auth login" in msg.lower() or "not logged" in msg.lower() or "no github hosts" in msg.lower():
             msg = ""
-        return {
+        st = {
             "gh_ok": True,
             "logged_in": False,
             "user": "",
@@ -143,7 +245,7 @@ def status() -> dict:
             "gh": exe,
         }
     except json.JSONDecodeError:
-        return {
+        st = {
             "gh_ok": True,
             "logged_in": False,
             "user": "",
@@ -151,6 +253,19 @@ def status() -> dict:
             "error": "gh api user returned invalid json",
             "gh": exe,
         }
+    with _login_lock:
+        st.update(_login_snapshot())
+        if st.get("logged_in"):
+            proc = _login["proc"]
+            if proc is not None and proc.poll() is not None:
+                _login["proc"] = None
+                _login["user_code"] = ""
+                _login["verification_uri"] = ""
+                _login["error"] = ""
+            st["login_pending"] = False
+            st["user_code"] = ""
+            st["verification_uri"] = ""
+    return st
 
 
 def start_login() -> dict:
@@ -159,23 +274,85 @@ def start_login() -> dict:
         return {"started": False, "already": True, **st}
     if not st.get("gh_ok"):
         raise GitError(st.get("error") or "gh not found")
-    gh = st.get("gh") or gh_exe()
-    script = (
-        f'"{gh}" auth login --hostname github.com --git-protocol https'
-        " --web --skip-ssh-key --clipboard"
-        f' && "{gh}" auth setup-git'
-        " && echo Login finished. You can close this window."
-        " && pause"
+
+    with _login_lock:
+        proc = _login["proc"]
+        if proc is not None and proc.poll() is None and _login["user_code"]:
+            uri = _login["verification_uri"] or DEVICE_URL
+            code = _login["user_code"]
+            reuse = True
+        else:
+            reuse = False
+            code = ""
+            uri = DEVICE_URL
+
+    if reuse:
+        _open_system_browser(uri)
+        st = status()
+        return {"started": True, "already": False, **st}
+
+    env = os.environ.copy()
+    env["BROWSER"] = "false"
+    flags = CREATE_NO_WINDOW if os.name == "nt" else 0
+    _kill_login()
+    proc = subprocess.Popen(
+        [
+            gh_exe(),
+            "auth",
+            "login",
+            "--hostname",
+            "github.com",
+            "--git-protocol",
+            "https",
+            "--web",
+            "--skip-ssh-key",
+        ],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        env=env,
+        creationflags=flags,
     )
-    kwargs = {}
-    if os.name == "nt":
-        kwargs["creationflags"] = CREATE_NEW_CONSOLE
-    subprocess.Popen(["cmd.exe", "/c", script], **kwargs)
-    log.info("started gh auth login")
+    with _login_lock:
+        _login["proc"] = proc
+        _login["user_code"] = ""
+        _login["verification_uri"] = ""
+        _login["error"] = ""
+        _login["lines"] = []
+    threading.Thread(target=_consume_login, args=(proc,), daemon=True).start()
+
+    deadline = time.time() + 10
+    code = ""
+    uri = ""
+    while time.time() < deadline:
+        with _login_lock:
+            code = _login["user_code"]
+            uri = _login["verification_uri"]
+            alive = _login["proc"] is not None and _login["proc"].poll() is None
+            err = _login["error"]
+        if code:
+            break
+        if not alive and not code:
+            _kill_login()
+            raise GitError(err or "could not start GitHub login")
+        time.sleep(0.1)
+    if not code:
+        with _login_lock:
+            tail = "".join(_login["lines"])[-300:]
+        _kill_login()
+        raise GitError("could not read GitHub login code. " + tail)
+
+    _open_system_browser(uri or DEVICE_URL)
+    log.info("github device login code issued")
+    st = status()
     return {"started": True, "already": False, **st}
 
 
 def logout() -> dict:
+    _kill_login()
     st = status()
     user = st.get("user") or ""
     args = ["auth", "logout", "--hostname", "github.com"]

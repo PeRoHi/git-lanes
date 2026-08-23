@@ -311,7 +311,7 @@ Git が PATH に無くても `Program Files\Git\cmd\git.exe` などを探す。E
 - この PC に無いリポを `gh repo clone` して登録
 - 今開いているリポの `git fetch --all`（private の origin を含む）
 
-流れ: UI の Sign in → コンソール + ブラウザで `gh auth login --web` → 戻ると一覧。Sign out は `gh auth logout`。
+流れ: UI の Sign in → `gh` がワンタイムコードを出し、Git Lanes に大きく表示 → システムのブラウザで `github.com/login/device` を開く。コンソール窓は出さない。Sign out は `gh auth logout`。
 
 このツール自体を `PeRoHi/git-lanes` に載せる **push は UI に出さない**（Phase 4）。ログイン後に手元で `gh repo create` する。
 
