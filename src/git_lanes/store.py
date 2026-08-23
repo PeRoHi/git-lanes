@@ -80,7 +80,17 @@ def load_state() -> dict:
         return {}
     return {
         "last_opened": str(data.get("last_opened") or ""),
+        "github_user": str(data.get("github_user") or ""),
     }
+
+
+def set_github_user(login: str) -> None:
+    st = load_state()
+    name = str(login or "").strip()
+    if st.get("github_user") == name:
+        return
+    st["github_user"] = name
+    save_state(st)
 
 
 def save_config(cfg: dict) -> None:
@@ -88,7 +98,18 @@ def save_config(cfg: dict) -> None:
 
 
 def save_state(state: dict) -> None:
-    _write_json(_state_path(), state)
+    prev = _read_json(_state_path(), {})
+    if not isinstance(prev, dict):
+        prev = {}
+    merged = {
+        "last_opened": str(
+            state["last_opened"] if "last_opened" in state else prev.get("last_opened") or ""
+        ),
+        "github_user": str(
+            state["github_user"] if "github_user" in state else prev.get("github_user") or ""
+        ),
+    }
+    _write_json(_state_path(), merged)
 
 
 def _slug(name: str) -> str:

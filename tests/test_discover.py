@@ -112,6 +112,18 @@ class DiscoverTest(unittest.TestCase):
         self.assertIsNotNone(rec)
         self.assertEqual(rec["id"], "alive")
 
+    def test_github_user_survives_last_opened_save(self):
+        from git_lanes.store import load_state, save_state, set_github_user
+
+        set_github_user("PeRoHi")
+        self.assertEqual(load_state()["github_user"], "PeRoHi")
+        save_state({"last_opened": "alive"})
+        st = load_state()
+        self.assertEqual(st["github_user"], "PeRoHi")
+        self.assertEqual(st["last_opened"], "alive")
+        set_github_user("")
+        self.assertEqual(load_state()["github_user"], "")
+
     def test_open_workspace_adds_nested_repos(self):
         from git_lanes.discover import open_user_path
 

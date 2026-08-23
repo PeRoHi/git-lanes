@@ -28,7 +28,7 @@ start.bat
 4. このリポを置く（例: `Desktop\program\git-lanes` でも `Desktop\個人用\program file\git-lanes` でも可）
 5. `start.bat`
 
-GitHub ログインは **レーン図を見るだけなら不要**。GitHub 上のリポをこの PC に clone したり、private の origin を fetch したりするときだけ、画面の **GitHub → Sign in**（GitHub CLI `gh` が必要）。トークンは git-lanes には保存しない。
+GitHub ログインは **レーン図を見るだけなら不要**。GitHub 上のリポをこの PC に clone したり、private の origin を fetch したりするときだけ、画面の **GitHub → Sign in**（GitHub CLI `gh` が必要）。トークンは `gh` のストアに残り、Git Lanes を閉じても Sign out するまで入ったまま。git-lanes のファイルには token を書かない。一覧は行全体をクリックして開く／足す。
 
 ## 操作
 

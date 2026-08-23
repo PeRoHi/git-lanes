@@ -13,7 +13,7 @@ from pathlib import Path
 
 from git_lanes.discover import APP_ROOT, candidate_roots
 from git_lanes.gitio import GitError, fetch_all, is_work_tree, origin_url, toplevel
-from git_lanes.store import resolve_repo, upsert_repo, visible_repos
+from git_lanes.store import load_state, resolve_repo, set_github_user, upsert_repo, visible_repos
 
 log = logging.getLogger("git_lanes.github")
 
@@ -159,6 +159,13 @@ def _consume_login(proc: subprocess.Popen) -> None:
                 _run_gh(["auth", "setup-git"])
             except GitError:
                 log.exception("gh auth setup-git")
+            try:
+                raw = _run_gh(["api", "user"])
+                login = str(json.loads(raw).get("login") or "")
+                if login:
+                    set_github_user(login)
+            except (GitError, json.JSONDecodeError):
+                log.exception("remember github user")
     except Exception as exc:
         log.exception("login reader")
         with _login_lock:
@@ -219,6 +226,8 @@ def status() -> dict:
         }
         with _login_lock:
             st.update(_login_snapshot())
+        st["remembered"] = False
+        st["remembered_user"] = load_state().get("github_user") or ""
         return st
     try:
         raw = _run_gh(["api", "user"])
@@ -265,6 +274,13 @@ def status() -> dict:
             st["login_pending"] = False
             st["user_code"] = ""
             st["verification_uri"] = ""
+    if st.get("logged_in") and st.get("user"):
+        set_github_user(st["user"])
+        st["remembered"] = True
+        st["remembered_user"] = st["user"]
+    else:
+        st["remembered"] = False
+        st["remembered_user"] = load_state().get("github_user") or ""
     return st
 
 
@@ -364,6 +380,7 @@ def logout() -> dict:
         if st.get("logged_in"):
             raise
         log.info("logout: %s", exc)
+    set_github_user("")
     return status()
 
 

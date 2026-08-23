@@ -245,7 +245,7 @@ MVP で使うコマンドの種類:
 | 置き場 | 内容 |
 |---|---|
 | `%APPDATA%/git-lanes/config.json` | 登録リポ一覧（表示名 + path）と `scan_roots` |
-| `%APPDATA%/git-lanes/state.json` | last-opened、ウィンドウサイズ（任意） |
+| `%APPDATA%/git-lanes/state.json` | last-opened、最後に確認した GitHub ユーザー名（token は書かない） |
 | リポ内 `config.example.json` | キーの見本だけ。実 path は書かない |
 
 設定は **PC ごと**（APPDATA）。他の PC の path を共有しない。この PC に存在しない登録はドロップダウンに出さない。
@@ -311,7 +311,9 @@ Git が PATH に無くても `Program Files\Git\cmd\git.exe` などを探す。E
 - この PC に無いリポを `gh repo clone` して登録
 - 今開いているリポの `git fetch --all`（private の origin を含む）
 
-流れ: UI の Sign in → `gh` がワンタイムコードを出し、Git Lanes に大きく表示 → システムのブラウザで `github.com/login/device` を開く。コンソール窓は出さない。Sign out は `gh auth logout`。
+流れ: UI の Sign in → `gh` がワンタイムコードを出し、Git Lanes に大きく表示 → システムのブラウザで `github.com/login/device` を開く。コンソール窓は出さない。トークンは **`gh` の資格情報ストア**に残るので、Git Lanes を閉じても次起動で入ったまま。ユーザー名だけ `state.json` に覚え、Sign out（`gh auth logout`）で消す。Git Lanes のファイルに token は書かない。
+
+GitHub 一覧は行全体をクリックして開く／未 clone ならこの PC に足す（右端の小さな Open ボタンだけではない）。
 
 このツール自体を `PeRoHi/git-lanes` に載せる **push は UI に出さない**（Phase 4）。ログイン後に手元で `gh repo create` する。
 
@@ -445,3 +447,4 @@ Phase 1 の受け入れは「テスト緑」+ 実機で `life` か本リポの `
 | 2026-08-23 | GitHub リモートは `PeRoHi/git-lanes` 予定 | 他の個人ツールと同じ。この PC は `gh` 未ログインのため作成は後回し | 可逆 |
 | 2026-08-23 | 既知ルートのスキャン + PATH 非依存の起動 | 自分の他リポを足す。t230g / hidek で Desktop 形が違ってもコードに絶対パスを書かない | 可逆 |
 | 2026-08-23 | GitHub は `gh` ログイン任意。グラフはローカルのまま | リモートの自分のリポをこの PC に足す／fetch するため。token は gh 任せ。push UI は Phase 4 | 可逆 |
+| 2026-08-23 | ログインは Sign out までこの PC に残す。一覧は行全体クリック | ウィンドウを閉じても再ログインしない。token は gh ストア、ユーザー名だけ state.json | 可逆 |

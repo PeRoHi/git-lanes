@@ -431,6 +431,10 @@ function renderGhStatus(st) {
     logoutBtn.classList.remove("hidden");
     header.textContent = "@" + st.user;
     showGhCode("", "");
+    $("ghHint").textContent =
+      "Signed in as " +
+      st.user +
+      ". Saved on this PC until Sign out. Click a row to open or add.";
   } else {
     label.textContent = "GitHub: signed out";
     loginBtn.classList.remove("hidden");
@@ -449,8 +453,14 @@ function renderGhList(data) {
     return;
   }
   for (const r of repos) {
-    const row = document.createElement("div");
+    const row = document.createElement("button");
+    row.type = "button";
     row.className = "gh-row";
+    const localId = r.local && r.local.id ? r.local.id : "";
+    if (localId && localId === state.repoId) {
+      row.classList.add("current");
+      row.setAttribute("aria-current", "true");
+    }
     const name = document.createElement("span");
     name.className = "name";
     name.textContent = r.nameWithOwner || r.name;
@@ -461,30 +471,35 @@ function renderGhList(data) {
       p.textContent = "private";
       row.appendChild(p);
     }
-    const btn = document.createElement("button");
-    btn.type = "button";
-    if (r.local && r.local.id) {
-      btn.textContent = "Open";
-      btn.addEventListener("click", async () => {
-        try {
-          await api("/api/repos/select", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id: r.local.id }),
-          });
-          state.repoId = r.local.id;
-          $("repoSelect").value = state.repoId;
-          await loadGraph(true);
-        } catch (err) {
-          showError(String(err.message || err));
-        }
-      });
-    } else {
-      btn.textContent = "Add";
-      btn.addEventListener("click", () => cloneGithub(r.nameWithOwner, btn));
-    }
-    row.appendChild(btn);
+    const action = document.createElement("span");
+    action.className = "action";
+    action.textContent = localId ? "Open" : "Add";
+    row.appendChild(action);
+    row.addEventListener("click", async () => {
+      if (localId) {
+        await openGithubLocal(localId);
+      } else {
+        await cloneGithub(r.nameWithOwner, row);
+      }
+    });
     box.appendChild(row);
+  }
+}
+
+async function openGithubLocal(id) {
+  showError("");
+  try {
+    await api("/api/repos/select", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    state.repoId = id;
+    $("repoSelect").value = state.repoId;
+    await loadGraph(true);
+    await refreshGithub(true);
+  } catch (err) {
+    showError(String(err.message || err));
   }
 }
 
@@ -492,7 +507,6 @@ async function refreshGithub(loadList) {
   const st = await api("/api/github/status");
   renderGhStatus(st);
   if (loadList && st.logged_in) {
-    $("ghHint").textContent = "Clones go into this PC's usual program folder.";
     const data = await api("/api/github/repos");
     renderGhStatus(data);
     renderGhList(data);

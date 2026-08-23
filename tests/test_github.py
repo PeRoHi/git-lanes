@@ -40,14 +40,18 @@ class GithubNameTest(unittest.TestCase):
         self.assertEqual(uri, DEVICE_URL)
         self.assertEqual(parse_login_banner(""), ("", ""))
 
-    def test_status_without_login(self):
+    def test_status_shape(self):
         from git_lanes.github import status
 
         st = status()
         self.assertIn("logged_in", st)
         self.assertIn("gh_ok", st)
-        if st["gh_ok"]:
-            self.assertFalse(st["logged_in"])
+        self.assertIn("remembered", st)
+        self.assertIn("remembered_user", st)
+        if st.get("logged_in"):
+            self.assertTrue(st["user"])
+            self.assertTrue(st["remembered"])
+            self.assertEqual(st["remembered_user"], st["user"])
 
     def test_clone_parent_prefers_app_parent(self):
         from git_lanes.github import APP_ROOT, clone_parent
@@ -103,7 +107,12 @@ class GithubStatusApiTest(unittest.TestCase):
         with self.urllib.urlopen(url, timeout=10) as resp:
             body = self.json.loads(resp.read().decode("utf-8"))
         self.assertIn("logged_in", body)
-        self.assertFalse(body["logged_in"])
+        self.assertIn("remembered", body)
+        self.assertIn("remembered_user", body)
+        if body["logged_in"]:
+            self.assertTrue(body["user"])
+            self.assertTrue(body["remembered"])
+            self.assertEqual(body["remembered_user"], body["user"])
 
 
 if __name__ == "__main__":
