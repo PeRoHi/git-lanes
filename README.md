@@ -4,23 +4,46 @@ IDE を開かずに、ローカル Git の枝の合流を見る専用ビュー�
 
 設計の正: [`docs/DESIGN.md`](docs/DESIGN.md)
 
-## 現状
+## 起動（Windows）
 
-**Phase 0（設計）まで。** 起動スクリプトとサーバはまだ無い。実装は設計への GO のあと。
+```bat
+start.bat
+```
 
-## 何を解決するか
+ウィンドウを閉じるとサーバも止まる（セッション型）。障害で port が残ったときだけ `stop.bat`。
 
-Cursor / VS Code の Git Graph と同じく、merge commit はレーンがトランクに戻り、squash は切れて見える。`gitk` は実機で見た目が足りなかった。GitHub の Network は未 push のローカル枝を出さない。
+- デバッグ（コンソール表示）: `start-debug.bat`
+- URL: `http://127.0.0.1:17920/`（Edge `--app=`）
+- デスクトップショートカット: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\create-shortcut.ps1`
 
-## 起動（未実装）
+初回は **Open folder** で `.git` のあるフォルダを選ぶ。以後は last-opened を開く。
 
-Phase 1 で `start.bat` を置く。仮 port は **17920**（`127.0.0.1`）。セッション型なので、ウィンドウを閉じるとサーバも止まる。
+## 操作
+
+| 操作 | 意味 |
+|---|---|
+| Open folder | ローカルリポを登録して表示 |
+| Repo ドロップダウン | 登録済みリポを切替 |
+| 行クリック | 件名 / 本文 / 親 / 参照 |
+| Refresh / Ctrl+R | 再読込（fetch しない） |
+| Ctrl+H | HEAD へスクロール |
+| Esc | 詳細を閉じる |
+| Quit / ウィンドウ閉じ | サーバ停止 |
+
+閲覧のみ。checkout や merge は出さない。
 
 ## 開発
 
-ブランチ:
+日常レーンは `PeRo`。
 
-- `main` — 最終統合
-- `PeRo` — 日常レーン（作業先）
+```bat
+set PYTHONPATH=src
+python -m unittest discover -s tests -v
+```
 
-テストとランチャは Phase 1 で追加する。未確認のインストール手順はここには書かない。
+サーバだけ（ブラウザは手動）:
+
+```bat
+set PYTHONPATH=src
+python -m git_lanes
+```

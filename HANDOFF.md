@@ -4,19 +4,20 @@
 
 ## いま
 
-Phase 0 の設計を `docs/DESIGN.md` に書いた。実装コードは無い。
+Phase 1 MVP が入った。日常レーン `PeRo`。
 
 - ローカル: `C:\Users\t230g\Desktop\個人用\program file\git-lanes`
-- 日常レーン: `PeRo`（初期 commit のあと）
-- GitHub: `PeRoHi/git-lanes` 予定。この PC は `gh auth login` 前なので remote 未接続
+- 起動: `start.bat`（port 17920）
+- GitHub: `PeRoHi/git-lanes` 予定。この PC は `gh` 未ログインのため remote 未接続
 
 ## 次
 
-1. 設計への人間 GO
-2. Phase 1 MVP（`start.bat`、レーン図、merge/squash テスト、フォルダを開く）
-3. `gh auth login` のあと `PeRoHi/git-lanes`（private）を作って push
+1. 実機で `life` か本リポを Open folder してレーンを目視
+2. Phase 2 残り: Branches フィルタ、Find
+3. `gh auth login` のあと private リポを作って push
 
 ## 触らない
 
 - Git Graph 拡張のソース
-- life リポへの実装混入（ポインタだけ life/`projects.md`）
+- 書き込み UI（Phase 4）
+- life リポへの実装混入

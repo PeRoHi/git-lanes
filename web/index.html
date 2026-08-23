@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Git Lanes</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="bar">
+    <div class="brand">Git Lanes</div>
+    <label class="field">
+      <span>Repo</span>
+      <select id="repoSelect"></select>
+    </label>
+    <button type="button" id="openBtn">Open folder</button>
+    <span class="grow"></span>
+    <span id="headLabel" class="muted"></span>
+    <button type="button" id="refreshBtn">Refresh</button>
+    <button type="button" id="quitBtn">Quit</button>
+  </header>
+
+  <section id="empty" class="empty hidden">
+    <p>Open a local git folder to see its lanes.</p>
+    <button type="button" id="emptyOpenBtn">Open folder</button>
+  </section>
+
+  <section id="error" class="error hidden"></section>
+
+  <div id="tableWrap" class="hidden">
+    <div class="cols head-row">
+      <div class="col-graph" id="graphHead">Graph</div>
+      <div class="col-desc">Description</div>
+      <div class="col-date">Date</div>
+      <div class="col-author">Author</div>
+      <div class="col-hash">Commit</div>
+    </div>
+    <div id="rows" class="rows"></div>
+    <div class="more-wrap">
+      <button type="button" id="moreBtn" class="hidden">Load more</button>
+    </div>
+  </div>
+
+  <aside id="detail" class="detail hidden">
+    <button type="button" class="detail-close" id="detailClose">Close</button>
+    <div id="detailBody"></div>
+  </aside>
+
+  <script src="/app.js"></script>
+</body>
+</html>
