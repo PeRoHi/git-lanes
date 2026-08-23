@@ -23,6 +23,9 @@ html, body {
   background: var(--bg);
   color: var(--fg);
   font: 13px/1.35 "Segoe UI", "Meiryo UI", sans-serif;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .bar {
@@ -73,7 +76,8 @@ button:hover, select:hover { border-color: #888; }
 #tableWrap {
   display: flex;
   flex-direction: column;
-  height: calc(100% - 42px);
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .cols, .row {
@@ -96,10 +100,13 @@ button:hover, select:hover { border-color: #888; }
   overflow: auto;
   flex: 1;
   min-height: 0;
+  isolation: isolate;
 }
 
 .rows-inner {
   position: relative;
+  isolation: isolate;
+  overflow: hidden;
 }
 
 .graph-overlay {
@@ -107,13 +114,13 @@ button:hover, select:hover { border-color: #888; }
   left: 8px;
   top: 0;
   pointer-events: none;
-  z-index: 2;
+  z-index: 1;
   overflow: visible;
 }
 
 .rows {
   position: relative;
-  z-index: 1;
+  z-index: 0;
 }
 
 .row {
@@ -147,6 +154,13 @@ button:hover, select:hover { border-color: #888; }
   align-items: center;
   justify-content: flex-start;
   height: 28px;
+  background: #1c1c1c;
+}
+
+.row:nth-child(even) .graph-cell,
+.row:hover .graph-cell,
+.row.selected .graph-cell {
+  background: #1c1c1c;
 }
 
 .pill {
@@ -165,14 +179,11 @@ button:hover, select:hover { border-color: #888; }
 .pill.branch { color: #111; background: var(--branch); border-color: var(--branch); }
 .pill.uncommitted { color: #111; background: var(--uncommitted); border-color: var(--uncommitted); }
 
-.more-wrap { padding: 8px; text-align: center; }
+.more-wrap { padding: 8px; text-align: center; flex-shrink: 0; }
 
 .detail {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  max-height: 36%;
+  flex: 0 0 auto;
+  max-height: 32vh;
   background: #141414;
   border-top: 1px solid var(--border);
   padding: 10px 16px 16px;

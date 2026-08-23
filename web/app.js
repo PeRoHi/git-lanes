@@ -72,23 +72,59 @@ function rowMid(i) {
   return i * ROW_H + ROW_H / 2;
 }
 
-function pipe(x1, y1, x2, y2) {
-  if (x1 === x2) {
-    return `M ${x1} ${y1} V ${y2}`;
+function mergeRuns(runs) {
+  const sorted = runs.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const out = [];
+  for (const [a, b] of sorted) {
+    if (!out.length || a > out[out.length - 1][1] + 0.01) {
+      out.push([a, b]);
+    } else {
+      out[out.length - 1][1] = Math.max(out[out.length - 1][1], b);
+    }
   }
-  const dy = y2 - y1;
-  const bend = Math.min(Math.abs(dy) * 0.45, Math.abs(x2 - x1) * 0.85, 14);
-  return `M ${x1} ${y1} C ${x1} ${y1 + bend}, ${x2} ${y2 - bend}, ${x2} ${y2}`;
+  return out;
 }
 
 function drawGraph(commits, laneCount) {
-  const svg = $("graphOverlay");
-  if (!svg) return;
+  const canvas = $("graphOverlay");
+  if (!canvas) return;
   const n = Math.max(laneCount || 1, 1);
-  const w = n * LANE_W + LANE_PAD * 2;
+  const w = Math.max(72, n * LANE_W + LANE_PAD * 2);
   const h = Math.max(commits.length, 1) * ROW_H;
-  const parts = [];
-  const strokeAttr = 'fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"';
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.round(w * dpr);
+  canvas.height = Math.round(h * dpr);
+  canvas.style.width = w + "px";
+  canvas.style.height = h + "px";
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = "#1c1c1c";
+  ctx.fillRect(0, 0, w, h);
+  ctx.lineWidth = 2;
+  ctx.lineJoin = "round";
+
+  const verts = new Map();
+  function addVert(lane, y1, y2) {
+    if (y1 === y2) return;
+    if (!verts.has(lane)) verts.set(lane, []);
+    verts.get(lane).push([Math.min(y1, y2), Math.max(y1, y2)]);
+  }
+
+  function strokePipe(x1, y1, x2, y2, stroke, cap) {
+    ctx.strokeStyle = stroke;
+    ctx.lineCap = cap;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    if (x1 === x2) {
+      ctx.lineTo(x2, y2);
+    } else {
+      const dy = y2 - y1;
+      const bend = Math.min(Math.abs(dy) * 0.4, Math.abs(x2 - x1), 12);
+      ctx.bezierCurveTo(x1, y1 + bend, x2, y2 - bend, x2, y2);
+    }
+    ctx.stroke();
+  }
 
   for (let i = 0; i < commits.length - 1; i++) {
     const prev = commits[i];
@@ -102,22 +138,28 @@ function drawGraph(commits, laneCount) {
       const from = e.from_lane;
       const to = e.to_lane;
       const stroke = color(e.kind === "merge" ? to : from);
-      parts.push(`<path d="${pipe(laneX(from), y1, laneX(to), y2)}" stroke="${stroke}" ${strokeAttr}/>`);
+      if (from === to) {
+        addVert(from, y1, y2);
+      } else {
+        strokePipe(laneX(from), y1, laneX(to), y2, stroke, "round");
+        takenDest.add(to);
+      }
       drawnFrom.add(from);
-      if (from !== to) takenDest.add(to);
     }
     for (const j of curr.joins || []) {
       if (drawnFrom.has(j)) continue;
-      parts.push(
-        `<path d="${pipe(laneX(j), y1, laneX(curr.lane), y2)}" stroke="${color(j)}" ${strokeAttr}/>`
-      );
+      strokePipe(laneX(j), y1, laneX(curr.lane), y2, color(j), "round");
       drawnFrom.add(j);
     }
     for (const lane of prev.through || []) {
       if (drawnFrom.has(lane) || takenDest.has(lane)) continue;
-      parts.push(
-        `<path d="${pipe(laneX(lane), y1, laneX(lane), y2)}" stroke="${color(lane)}" ${strokeAttr}/>`
-      );
+      addVert(lane, y1, y2);
+    }
+  }
+
+  for (const [lane, runs] of verts) {
+    for (const [y1, y2] of mergeRuns(runs)) {
+      strokePipe(laneX(lane), y1, laneX(lane), y2, color(lane), "butt");
     }
   }
 
@@ -126,17 +168,15 @@ function drawGraph(commits, laneCount) {
     const cx = laneX(c.lane);
     const cy = rowMid(i);
     const stroke = color(c.lane);
-    const fill = c.uncommitted ? "#1c1c1c" : stroke;
-    parts.push(
-      `<circle cx="${cx}" cy="${cy}" r="4" fill="${fill}" stroke="${stroke}" stroke-width="2"/>`
-    );
+    ctx.beginPath();
+    ctx.arc(cx, cy, 4, 0, Math.PI * 2);
+    ctx.fillStyle = c.uncommitted ? "#1c1c1c" : stroke;
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = 2;
+    ctx.lineCap = "butt";
+    ctx.fill();
+    ctx.stroke();
   }
-
-  svg.setAttribute("width", String(w));
-  svg.setAttribute("height", String(h));
-  svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
-  svg.setAttribute("shape-rendering", "geometricPrecision");
-  svg.innerHTML = parts.join("");
 }
 
 function renderRepos() {
@@ -255,9 +295,22 @@ async function loadGraph(reset) {
   }
 }
 
+function markSelected(hash) {
+  state.selected = hash || "";
+  const rows = $("rows");
+  if (!rows) return;
+  for (const row of rows.children) {
+    row.classList.toggle("selected", row.dataset.hash === state.selected);
+  }
+}
+
+function hideDetail() {
+  $("detail").classList.add("hidden");
+  markSelected("");
+}
+
 async function selectCommit(hash) {
-  state.selected = hash;
-  renderRows();
+  markSelected(hash);
   try {
     const q = new URLSearchParams({ repo_id: state.repoId, hash });
     const data = await api("/api/commit?" + q.toString());
@@ -315,11 +368,7 @@ $("emptyOpenBtn").addEventListener("click", openFolder);
 $("refreshBtn").addEventListener("click", () => loadGraph(true));
 $("quitBtn").addEventListener("click", quit);
 $("moreBtn").addEventListener("click", () => loadGraph(false));
-$("detailClose").addEventListener("click", () => {
-  $("detail").classList.add("hidden");
-  state.selected = "";
-  renderRows();
-});
+$("detailClose").addEventListener("click", hideDetail);
 $("repoSelect").addEventListener("change", async (ev) => {
   const id = ev.target.value;
   if (!id) return;
@@ -338,7 +387,7 @@ $("repoSelect").addEventListener("change", async (ev) => {
 
 document.addEventListener("keydown", (ev) => {
   if (ev.key === "Escape") {
-    $("detail").classList.add("hidden");
+    hideDetail();
     return;
   }
   if (ev.ctrlKey && ev.key.toLowerCase() === "r") {
