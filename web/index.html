@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Git Lanes</title>
-  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/style.css?v=2">
 </head>
 <body>
   <header class="bar">
@@ -35,7 +35,12 @@
       <div class="col-author">Author</div>
       <div class="col-hash">Commit</div>
     </div>
-    <div id="rows" class="rows"></div>
+    <div class="rows-body">
+      <div class="rows-inner">
+        <svg id="graphOverlay" class="graph-overlay" aria-hidden="true"></svg>
+        <div id="rows" class="rows"></div>
+      </div>
+    </div>
     <div class="more-wrap">
       <button type="button" id="moreBtn" class="hidden">Load more</button>
     </div>
@@ -46,6 +51,6 @@
     <div id="detailBody"></div>
   </aside>
 
-  <script src="/app.js"></script>
+  <script src="/app.js?v=2"></script>
 </body>
 </html>

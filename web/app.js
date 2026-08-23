@@ -1,5 +1,6 @@
-const LANE_W = 14;
+const LANE_W = 16;
 const ROW_H = 28;
+const LANE_PAD = 8;
 const COLORS = [
   "#3db9d3",
   "#c86cc8",
@@ -63,54 +64,79 @@ function linkify(text) {
   );
 }
 
-function graphSvg(commit, prev, laneCount) {
-  const n = Math.max(laneCount, commit.lane + 1);
-  const w = n * LANE_W + 10;
-  const h = ROW_H;
-  const x = (lane) => 8 + lane * LANE_W;
-  const mid = h / 2;
+function laneX(lane) {
+  return LANE_PAD + lane * LANE_W;
+}
+
+function rowMid(i) {
+  return i * ROW_H + ROW_H / 2;
+}
+
+function pipe(x1, y1, x2, y2) {
+  if (x1 === x2) {
+    return `M ${x1} ${y1} V ${y2}`;
+  }
+  const dy = y2 - y1;
+  const bend = Math.min(Math.abs(dy) * 0.45, Math.abs(x2 - x1) * 0.85, 14);
+  return `M ${x1} ${y1} C ${x1} ${y1 + bend}, ${x2} ${y2 - bend}, ${x2} ${y2}`;
+}
+
+function drawGraph(commits, laneCount) {
+  const svg = $("graphOverlay");
+  if (!svg) return;
+  const n = Math.max(laneCount || 1, 1);
+  const w = n * LANE_W + LANE_PAD * 2;
+  const h = Math.max(commits.length, 1) * ROW_H;
   const parts = [];
-  const through = new Set(commit.through || []);
-  const prevThrough = new Set(prev ? prev.through || [] : []);
-  const active = new Set([...through, ...prevThrough, commit.lane, ...(commit.joins || [])]);
-  if (prev) {
+  const strokeAttr = 'fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"';
+
+  for (let i = 0; i < commits.length - 1; i++) {
+    const prev = commits[i];
+    const curr = commits[i + 1];
+    const y1 = rowMid(i);
+    const y2 = rowMid(i + 1);
+    const drawnFrom = new Set();
+    const takenDest = new Set();
+
     for (const e of prev.edges || []) {
-      active.add(e.from_lane);
-      active.add(e.to_lane);
+      const from = e.from_lane;
+      const to = e.to_lane;
+      const stroke = color(e.kind === "merge" ? to : from);
+      parts.push(`<path d="${pipe(laneX(from), y1, laneX(to), y2)}" stroke="${stroke}" ${strokeAttr}/>`);
+      drawnFrom.add(from);
+      if (from !== to) takenDest.add(to);
     }
-  }
-
-  for (const lane of active) {
-    const stroke = color(lane);
-    parts.push(
-      `<line x1="${x(lane)}" y1="0" x2="${x(lane)}" y2="${h}" stroke="${stroke}" stroke-width="2"/>`
-    );
-  }
-
-  if (prev) {
-    for (const e of prev.edges || []) {
-      if (e.from_lane === e.to_lane) continue;
-      const stroke = color(e.kind === "merge" ? e.to_lane : e.from_lane);
+    for (const j of curr.joins || []) {
+      if (drawnFrom.has(j)) continue;
       parts.push(
-        `<path d="M ${x(e.from_lane)} 0 C ${x(e.from_lane)} ${mid}, ${x(e.to_lane)} ${mid}, ${x(e.to_lane)} ${h}" fill="none" stroke="${stroke}" stroke-width="2"/>`
+        `<path d="${pipe(laneX(j), y1, laneX(curr.lane), y2)}" stroke="${color(j)}" ${strokeAttr}/>`
+      );
+      drawnFrom.add(j);
+    }
+    for (const lane of prev.through || []) {
+      if (drawnFrom.has(lane) || takenDest.has(lane)) continue;
+      parts.push(
+        `<path d="${pipe(laneX(lane), y1, laneX(lane), y2)}" stroke="${color(lane)}" ${strokeAttr}/>`
       );
     }
   }
 
-  for (const j of commit.joins || []) {
-    const stroke = color(j);
+  for (let i = 0; i < commits.length; i++) {
+    const c = commits[i];
+    const cx = laneX(c.lane);
+    const cy = rowMid(i);
+    const stroke = color(c.lane);
+    const fill = c.uncommitted ? "#1c1c1c" : stroke;
     parts.push(
-      `<path d="M ${x(j)} 0 C ${x(j)} ${mid}, ${x(commit.lane)} ${mid}, ${x(commit.lane)} ${mid}" fill="none" stroke="${stroke}" stroke-width="2"/>`
+      `<circle cx="${cx}" cy="${cy}" r="4" fill="${fill}" stroke="${stroke}" stroke-width="2"/>`
     );
   }
 
-  const cx = x(commit.lane);
-  const fill = commit.uncommitted ? "transparent" : color(commit.lane);
-  const stroke = color(commit.lane);
-  parts.push(
-    `<circle cx="${cx}" cy="${mid}" r="4.5" fill="${fill}" stroke="${stroke}" stroke-width="2"/>`
-  );
-  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true">${parts.join("")}</svg>`;
+  svg.setAttribute("width", String(w));
+  svg.setAttribute("height", String(h));
+  svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+  svg.setAttribute("shape-rendering", "geometricPrecision");
+  svg.innerHTML = parts.join("");
 }
 
 function renderRepos() {
@@ -133,9 +159,11 @@ function renderRows() {
   const wrap = $("rows");
   wrap.innerHTML = "";
   const laneCount = state.laneCount || 1;
-  document.documentElement.style.setProperty("--graph-w", `${Math.max(72, laneCount * LANE_W + 16)}px`);
-  state.commits.forEach((c, i) => {
-    const prev = i > 0 ? state.commits[i - 1] : null;
+  document.documentElement.style.setProperty(
+    "--graph-w",
+    `${Math.max(72, laneCount * LANE_W + LANE_PAD * 2)}px`
+  );
+  state.commits.forEach((c) => {
     const row = document.createElement("div");
     row.className = "row" + (c.hash === state.selected ? " selected" : "");
     row.dataset.hash = c.hash;
@@ -146,7 +174,7 @@ function renderRows() {
       ? `<span class="pill uncommitted">Uncommitted</span>`
       : refs;
     row.innerHTML = `
-      <div class="col-graph graph-cell">${graphSvg(c, prev, laneCount)}</div>
+      <div class="col-graph graph-cell"></div>
       <div class="col-desc">${extra}${esc(c.subject || "")}</div>
       <div class="col-date">${c.uncommitted ? "" : relTime(c.author_at)}</div>
       <div class="col-author">${esc(c.author || "")}</div>
@@ -155,6 +183,7 @@ function renderRows() {
     row.addEventListener("click", () => selectCommit(c.hash));
     wrap.appendChild(row);
   });
+  drawGraph(state.commits, laneCount);
   $("moreBtn").classList.toggle("hidden", !state.hasMore);
 }
 
