@@ -361,11 +361,36 @@ async function openFolder() {
     const data = await api("/api/repos/browse", { method: "POST" });
     if (data.cancelled) return;
     await loadRepos();
-    state.repoId = data.repo.id;
-    $("repoSelect").value = state.repoId;
+    if (data.repo && data.repo.id) {
+      state.repoId = data.repo.id;
+      $("repoSelect").value = state.repoId;
+    }
     await loadGraph(true);
   } catch (err) {
     showError(String(err.message || err));
+  }
+}
+
+async function findRepos() {
+  showError("");
+  const buttons = ["scanBtn", "emptyScanBtn"].map($).filter(Boolean);
+  for (const btn of buttons) btn.disabled = true;
+  try {
+    const data = await api("/api/repos/scan", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    await loadRepos();
+    if (data.repo && data.repo.id) {
+      state.repoId = data.repo.id;
+      $("repoSelect").value = state.repoId;
+    }
+    await loadGraph(true);
+  } catch (err) {
+    showError(String(err.message || err));
+  } finally {
+    for (const btn of buttons) btn.disabled = false;
   }
 }
 
@@ -379,7 +404,9 @@ async function quit() {
 }
 
 $("openBtn").addEventListener("click", openFolder);
+$("scanBtn").addEventListener("click", findRepos);
 $("emptyOpenBtn").addEventListener("click", openFolder);
+$("emptyScanBtn").addEventListener("click", findRepos);
 $("refreshBtn").addEventListener("click", () => loadGraph(true));
 $("quitBtn").addEventListener("click", quit);
 $("moreBtn").addEventListener("click", () => loadGraph(false));
@@ -422,6 +449,10 @@ window.addEventListener("pagehide", () => {
 (async function init() {
   try {
     await loadRepos();
+    if (!state.repos.length) {
+      await findRepos();
+      return;
+    }
     state.repoId = state.lastOpened || "";
     await loadGraph(true);
   } catch (err) {

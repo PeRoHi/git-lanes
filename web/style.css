@@ -53,6 +53,15 @@ html, body {
 
 .field span, .muted { color: var(--muted); }
 
+#repoSelect { max-width: 260px; }
+
+.empty-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 12px;
+}
+
 select, button {
   background: #111;
   color: var(--fg);

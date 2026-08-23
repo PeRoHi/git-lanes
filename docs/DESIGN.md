@@ -63,9 +63,11 @@ IDE を開かずに同じものを見たくて既存手段を当たった。
 
 ```
 start.bat
+  → この PC の Python 3.10+ / Git / Edge を探す
   → 固定 port の health OK
+  → 既知の作業フォルダをスキャンして自分のリポを登録
   → Edge --app= 専用ウィンドウ
-  → 最後に開いたリポ（無ければフォルダ選択）
+  → 最後に開いたリポ（この PC に無い path は飛ばす）
   → レーン図（全枝）
   → コミットをクリックすると詳細
   → ウィンドウを閉じる / 「終了」→ サーバ停止
@@ -94,7 +96,7 @@ Git Graph と同じ情報密度を目指す。上から下へ新しいコミッ�
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│ Git Lanes     [リポ v]  [Branches: All v]  [更新]  [終了]         │
+│ Git Lanes  [リポ v]  [Find my repos] [Open folder]  [更新] [終了] │
 ├────┬──────────────────────────────────┬──────────┬────────┬──────┤
 │Graph│ Description                      │ Date     │ Author │Commit│
 ├────┼──────────────────────────────────┼──────────┼────────┼──────┤
@@ -116,7 +118,9 @@ Git Graph と同じ情報密度を目指す。上から下へ新しいコミッ�
 - 未コミット変更があるときは最上段に **Uncommitted** 行
 - 初期は **全枝**（`git log --all` 相当）
 - コミットクリックで下（または右）に詳細
-- リポ切り替え（ドロップダウン + フォルダを開く）
+- リポ切り替え（ドロップダウン）
+- **Find my repos**（この PC の既知作業フォルダをスキャン）
+- **Open folder**（1リポ、または親フォルダ配下の Git をまとめて登録）
 
 ### 3.2 操作（MVP）
 
@@ -235,15 +239,62 @@ MVP で使うコマンドの種類:
 
 ## 6. 設定と状態
 
-コードにマシン固有の絶対パスを埋め込まない。
+コードにマシン固有の絶対パスを埋め込まない。t230g と hidek で Desktop の形が違っても、ホーム相対の候補と「このクローンの親フォルダ」だけを見る。
 
 | 置き場 | 内容 |
 |---|---|
-| `%APPDATA%/git-lanes/config.json` | 登録リポ一覧（表示名 + path） |
+| `%APPDATA%/git-lanes/config.json` | 登録リポ一覧（表示名 + path）と `scan_roots` |
 | `%APPDATA%/git-lanes/state.json` | last-opened、ウィンドウサイズ（任意） |
 | リポ内 `config.example.json` | キーの見本だけ。実 path は書かない |
 
-初回起動: 登録が空 → 「フォルダを開く」だけ出す。
+設定は **PC ごと**（APPDATA）。他の PC の path を共有しない。この PC に存在しない登録はドロップダウンに出さない。
+
+### 6.1 リポの見つけ方
+
+ディスク全体は走査しない。
+
+起動時と **Find my repos** は、存在する候補だけを深さ 4 まで見る。
+
+- `%USERPROFILE%\Desktop\program`
+- `%USERPROFILE%\Desktop\個人用\program file`
+- `%USERPROFILE%\Desktop\life`
+- `%USERPROFILE%\Documents\HDLSim`
+- 上記の OneDrive Desktop 版（フォルダがあるときだけ）
+- この `git-lanes` クローン自身と、その親フォルダ
+- ユーザーが Open folder した親フォルダ（`scan_roots`）
+
+`.git` のある作業ツリーだけ登録する。`node_modules` / `.venv` などには入らない。上限は訪問 1200 ディレクトリ・リポ 120・8 秒。
+
+**Open folder** は次のどちらか。
+
+- そのフォルダが Git 作業ツリー → 1件登録して開く
+- そうでない → 配下をスキャンして見つかったリポを全部登録し、親を `scan_roots` に残す
+
+### 6.2 どの PC でも起動する
+
+依存は **Python 3.10+（stdlib のみ）・Git・Edge または Chrome**。venv は不要。GitHub ログインも不要。
+
+`start.bat` は `scripts\find-python.cmd` で `pythonw.exe` を探す。見つからなければ MessageBox。
+
+1. リポの `.venv\Scripts\pythonw.exe`（任意）
+2. `py -3` が返す interpreter と同じフォルダの `pythonw.exe`
+3. `%LocalAppData%\Programs\Python\Python3*\pythonw.exe`
+4. pyenv-win の versions
+5. PATH の `pythonw` / `python`（WindowsApps のストアスタブは使わない）
+
+`py -3w` は環境によってはスクリプトを起動しないので使わない。
+
+Git が PATH に無くても `Program Files\Git\cmd\git.exe` などを探す。Edge も Program Files / LOCALAPPDATA / PATH を見る。デスクトップショートカットが無ければ初回起動で作る。
+
+新しい PC:
+
+1. Python 3.10+ と Git for Windows を入れる（`py` ランチャーか PATH）
+2. このリポを好きな場所に clone / コピーする（パスはマシンごとに違ってよい）
+3. `start.bat` を実行する
+
+### 6.3 初回
+
+登録が空 → 既知ルートをスキャン → まだ空なら Find my repos / Open folder。
 
 ---
 
@@ -261,6 +312,7 @@ MVP で使うコマンドの種類:
 
 - `.bat` / `.ps1` は ASCII のみ。日本語リテラル禁止。ユーザー向け説明は `docs/` と README
 - 親 `start.bat` は子起動後すぐ exit
+- Python は `scripts\find-python.cmd` が `pythonw.exe` を探す。PATH に `pythonw` が無くてもよい。`py -3w` は使わない
 - `pythonw` なら logs / MessageBox / `start-debug.bat` の 3 点セット
 - 固定 port **17920** の `/api/health` 成功まで待ってから `--app=`
 - 既存 LISTENING なら先に回収し、空いてから起動
@@ -284,7 +336,7 @@ MVP で使うコマンドの種類:
 ## 8. セキュリティ
 
 - bind は `127.0.0.1` のみ
-- 対象 path は登録リストか、ユーザーが選んだフォルダ。任意 path をクエリで渡して親ディレクトリを辿らせない
+- 対象 path は登録リストか、ユーザーが選んだフォルダか、§6.1 の既知ルート。ディスク全体や任意の親辿りはしない
 - git 引数は配列。ユーザー入力をコマンド列に埋め込まない
 - 秘密情報・`.env` は不要（GitHub token も読まない）
 - コミット本文の URL は `http:` / `https:` だけリンク化
@@ -302,6 +354,8 @@ MVP で使うコマンドの種類:
 | feature を squash | トランク側に第2親が無い。枝は切れて見える |
 | 未コミット 1 ファイル | 最上段 Uncommitted |
 | `.git` が無いフォルダ | グラフを描かずエラー |
+| 既知ルート配下の Git | スキャンで登録される。`node_modules` 配下は対象外 |
+| この PC に無い登録 path | ドロップダウンに出さず、last-opened も飛ばす |
 
 Phase 1 の受け入れは「テスト緑」+ 実機で `life` か本リポの `PeRo` を目視。
 
@@ -328,6 +382,7 @@ Phase 1 の受け入れは「テスト緑」+ 実機で `life` か本リポの `
 ### Phase 2 — 使い勝手
 
 - [x] 登録リポの切替（last-opened）
+- [x] 既知作業フォルダのスキャンと、どの PC でも起動できるランチャ
 - [ ] Branches フィルタ
 - [x] Load More / 末尾自動ロード
 - [ ] Find（件名 / ハッシュ / 参照）
@@ -367,3 +422,4 @@ Phase 1 の受け入れは「テスト緑」+ 実機で `life` か本リポの `
 | 2026-08-23 | MVP は閲覧のみ | 見るためだけに git を壊さない | 可逆（Phase 4） |
 | 2026-08-23 | Git Graph ソースは使わない | GPL-3.0。レーン計算は自前 | 固定 |
 | 2026-08-23 | GitHub リモートは `PeRoHi/git-lanes` 予定 | 他の個人ツールと同じ。この PC は `gh` 未ログインのため作成は後回し | 可逆 |
+| 2026-08-23 | 既知ルートのスキャン + PATH 非依存の起動 | 自分の他リポを足す。t230g / hidek で Desktop 形が違ってもコードに絶対パスを書かない | 可逆 |

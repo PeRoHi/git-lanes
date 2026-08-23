@@ -8,14 +8,14 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from git_lanes import HOST, INITIAL_LOAD, LOAD_MORE, PORT
-from git_lanes.gitio import GitError, is_work_tree, load_commit, load_graph, toplevel
+from git_lanes.discover import open_user_path, scan_and_merge
+from git_lanes.gitio import GitError, is_work_tree, load_commit, load_graph
 from git_lanes.store import (
-    load_config,
     load_state,
     pick_last_or_none,
     resolve_repo,
     save_state,
-    upsert_repo,
+    visible_repos,
 )
 
 log = logging.getLogger("git_lanes.server")
@@ -54,9 +54,7 @@ def _repo_from_id(repo_id: str | None):
         path = resolve_repo(repo_id)
         if path is None:
             raise GitError("unknown repo")
-        rec = next(
-            r for r in load_config()["repos"] if r["id"] == repo_id
-        )
+        rec = next(r for r in visible_repos() if r["id"] == repo_id)
         return rec, path
     rec = pick_last_or_none()
     if rec is None:
@@ -67,17 +65,6 @@ def _repo_from_id(repo_id: str | None):
     return rec, path
 
 
-def _open_path(raw: str) -> dict:
-    path = Path(raw).expanduser()
-    if not path.exists():
-        raise GitError("path not found")
-    if not is_work_tree(path):
-        raise GitError("not a git repository")
-    top = toplevel(path)
-    rec = upsert_repo(top)
-    return rec
-
-
 def _handle_api(method: str, parsed, body: bytes):
     path = parsed.path
     qs = parse_qs(parsed.query)
@@ -86,18 +73,20 @@ def _handle_api(method: str, parsed, body: bytes):
         return _json_bytes({"ok": True, "name": "git-lanes"})
 
     if path == "/api/repos" and method == "GET":
-        cfg = load_config()
         st = load_state()
-        return _json_bytes(
-            {"repos": cfg["repos"], "last_opened": st.get("last_opened") or ""}
-        )
+        visible = visible_repos()
+        last = st.get("last_opened") or ""
+        if last and not any(r["id"] == last for r in visible):
+            last = ""
+        return _json_bytes({"repos": visible, "last_opened": last})
 
     if path == "/api/repos/browse" and method == "POST":
         chosen = _choose_folder()
         if not chosen:
             return _json_bytes({"cancelled": True})
-        rec = _open_path(chosen)
-        return _json_bytes({"cancelled": False, "repo": rec})
+        data = open_user_path(chosen)
+        data["cancelled"] = False
+        return _json_bytes(data)
 
     if path == "/api/repos/open" and method == "POST":
         try:
@@ -107,8 +96,26 @@ def _handle_api(method: str, parsed, body: bytes):
         raw = str(payload.get("path") or "")
         if not raw:
             raise GitError("path required")
-        rec = _open_path(raw)
-        return _json_bytes({"repo": rec})
+        return _json_bytes(open_user_path(raw))
+
+    if path == "/api/repos/scan" and method == "POST":
+        roots = None
+        if body:
+            try:
+                payload = json.loads(body.decode("utf-8") or "{}")
+            except json.JSONDecodeError as exc:
+                raise GitError("invalid json") from exc
+            raw_roots = payload.get("roots") if isinstance(payload, dict) else None
+            if raw_roots is not None:
+                if not isinstance(raw_roots, list):
+                    raise GitError("roots must be a list")
+                roots = []
+                for item in raw_roots:
+                    p = Path(str(item)).expanduser()
+                    if not p.exists():
+                        raise GitError("path not found")
+                    roots.append(p)
+        return _json_bytes(scan_and_merge(roots))
 
     if path == "/api/repos/select" and method == "POST":
         try:
@@ -122,7 +129,7 @@ def _handle_api(method: str, parsed, body: bytes):
         st = load_state()
         st["last_opened"] = rid
         save_state(st)
-        rec = next(r for r in load_config()["repos"] if r["id"] == rid)
+        rec = next(r for r in visible_repos() if r["id"] == rid)
         return _json_bytes({"repo": rec})
 
     if path == "/api/graph" and method == "GET":

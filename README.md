@@ -14,16 +14,29 @@ start.bat
 
 - デバッグ（コンソール表示）: `start-debug.bat`
 - URL: `http://127.0.0.1:17920/`（Edge `--app=`）
-- デスクトップショートカット: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\create-shortcut.ps1`
+- デスクトップショートカット: 初回起動で無ければ作る。手動なら `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\create-shortcut.ps1`
 
-初回は **Open folder** で `.git` のあるフォルダを選ぶ。以後は last-opened を開く。
+`start.bat` はマシンの PATH に `pythonw` が無くても、`py -3`・python.org のインストール・pyenv-win から `pythonw.exe` を探す。Git が PATH に無くても Git for Windows の定位置を探す。
+
+## 新しい PC
+
+コードにユーザー名や Desktop の絶対パスは入っていない。clone する場所はマシンごとに違ってよい。
+
+1. Python 3.10 以上（インストール時に `py` ランチャーか PATH）
+2. Git for Windows
+3. Edge または Chrome（Windows 11 なら Edge あり）
+4. このリポを置く（例: `Desktop\program\git-lanes` でも `Desktop\個人用\program file\git-lanes` でも可）
+5. `start.bat`
+
+GitHub ログインは不要。初回にいつもの作業フォルダ（`Desktop\program` や `Desktop\個人用\program file`、このクローンの親）をスキャンして、そこにある Git リポを一覧へ入れる。
 
 ## 操作
 
 | 操作 | 意味 |
 |---|---|
-| Open folder | ローカルリポを登録して表示 |
-| Repo ドロップダウン | 登録済みリポを切替 |
+| Find my repos | 既知の作業フォルダを再スキャンして、まだ無いリポを足す |
+| Open folder | 1リポを開く。Git でない親フォルダなら配下のリポをまとめて登録 |
+| Repo ドロップダウン | この PC に実在する登録済みリポを切替 |
 | 行クリック | 件名 / 本文 / 親 / 参照 |
 | Refresh / Ctrl+R | 再読込（fetch しない） |
 | Ctrl+H | HEAD へスクロール |

@@ -119,6 +119,51 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertIn("git", body["error"].lower())
 
+    def test_scan_and_workspace_open(self):
+        ws = Path(self.tmp.name) / "ws"
+        one = ws / "one"
+        two = ws / "nest" / "two"
+        for repo in (one, two):
+            repo.mkdir(parents=True)
+            self._git(repo, ["init", "-b", "main"])
+            self._git(repo, ["config", "user.email", "t@example.com"])
+            self._git(repo, ["config", "user.name", "Test"])
+            (repo / "a.txt").write_text("a", encoding="utf-8")
+            self._git(repo, ["add", "a.txt"])
+            subprocess.run(
+                ["git", "commit", "-m", "a"],
+                cwd=str(repo),
+                check=True,
+                capture_output=True,
+            )
+
+        status, body = self._json("/api/repos/scan", {"roots": [str(ws)]})
+        self.assertEqual(status, 200, body)
+        names = {r["name"] for r in body["repos"]}
+        self.assertEqual(names, {"one", "two"})
+        self.assertEqual(len(body["added"]), 2)
+
+        other = Path(self.tmp.name) / "other"
+        three = other / "three"
+        three.mkdir(parents=True)
+        self._git(three, ["init", "-b", "main"])
+        self._git(three, ["config", "user.email", "t@example.com"])
+        self._git(three, ["config", "user.name", "Test"])
+        (three / "a.txt").write_text("a", encoding="utf-8")
+        self._git(three, ["add", "a.txt"])
+        subprocess.run(
+            ["git", "commit", "-m", "a"],
+            cwd=str(three),
+            check=True,
+            capture_output=True,
+        )
+        status, body = self._json("/api/repos/open", {"path": str(other)})
+        self.assertEqual(status, 200, body)
+        self.assertTrue(body.get("workspace"))
+        names = {r["name"] for r in body["repos"]}
+        self.assertIn("three", names)
+        self.assertIn("one", names)
+
 
 if __name__ == "__main__":
     unittest.main()

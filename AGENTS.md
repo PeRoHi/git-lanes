@@ -20,7 +20,7 @@
 - Git Graph 拡張（`mhutchie.git-graph`）のソース流用
 - checkout / merge / rebase などの書き込み UI（Phase 4 と明示 GO まで）
 - `.bat` / `.ps1` の日本語リテラル
-- ディスク全体スキャン
+- ディスク全体スキャン（既知の作業フォルダとユーザーが選んだ親だけ）
 - `0.0.0.0` bind（localhost のみ）
 
 ## ブランチ

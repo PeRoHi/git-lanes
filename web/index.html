@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Git Lanes</title>
-  <link rel="stylesheet" href="/style.css?v=6">
+  <link rel="stylesheet" href="/style.css?v=7">
 </head>
 <body>
   <header class="bar">
@@ -13,6 +13,7 @@
       <span>Repo</span>
       <select id="repoSelect"></select>
     </label>
+    <button type="button" id="scanBtn">Find my repos</button>
     <button type="button" id="openBtn">Open folder</button>
     <span class="grow"></span>
     <span id="headLabel" class="muted"></span>
@@ -21,8 +22,11 @@
   </header>
 
   <section id="empty" class="empty hidden">
-    <p>Open a local git folder to see its lanes.</p>
-    <button type="button" id="emptyOpenBtn">Open folder</button>
+    <p>No git repo on this PC yet. Scan usual folders, or open one.</p>
+    <div class="empty-actions">
+      <button type="button" id="emptyScanBtn">Find my repos</button>
+      <button type="button" id="emptyOpenBtn">Open folder</button>
+    </div>
   </section>
 
   <section id="error" class="error hidden"></section>
@@ -51,6 +55,6 @@
     <div id="detailBody"></div>
   </aside>
 
-  <script src="/app.js?v=6"></script>
+  <script src="/app.js?v=7"></script>
 </body>
 </html>

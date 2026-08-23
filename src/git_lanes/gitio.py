@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -11,9 +12,47 @@ UNCOMMITTED = "UNCOMMITTED"
 RECORD_SEP = "\x1e"
 FIELD_SEP = "\x1f"
 
+_GIT_EXE: str | None = None
+
 
 class GitError(Exception):
     pass
+
+
+def git_exe() -> str:
+    """Locate git without assuming it is already on PATH (fresh Windows)."""
+    global _GIT_EXE
+    if _GIT_EXE:
+        return _GIT_EXE
+    override = os.environ.get("GIT_LANES_GIT")
+    if override and Path(override).is_file():
+        _GIT_EXE = override
+        return _GIT_EXE
+    found = shutil.which("git")
+    if found:
+        _GIT_EXE = found
+        return _GIT_EXE
+    pf = os.environ.get("ProgramFiles", r"C:\Program Files")
+    pf86 = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
+    local = os.environ.get("LOCALAPPDATA", "")
+    candidates = [
+        Path(pf) / "Git" / "cmd" / "git.exe",
+        Path(pf) / "Git" / "bin" / "git.exe",
+        Path(pf86) / "Git" / "cmd" / "git.exe",
+        Path(pf86) / "Git" / "bin" / "git.exe",
+    ]
+    if local:
+        candidates.extend(
+            [
+                Path(local) / "Programs" / "Git" / "cmd" / "git.exe",
+                Path(local) / "Programs" / "Git" / "bin" / "git.exe",
+            ]
+        )
+    for path in candidates:
+        if path.is_file():
+            _GIT_EXE = str(path)
+            return _GIT_EXE
+    raise GitError("git executable not found")
 
 
 def _creationflags() -> int:
@@ -23,7 +62,7 @@ def _creationflags() -> int:
 def run_git(cwd: Path, args: list[str], timeout: int = 30) -> str:
     try:
         proc = subprocess.run(
-            ["git", *args],
+            [git_exe(), *args],
             cwd=str(cwd),
             capture_output=True,
             text=True,
@@ -44,6 +83,11 @@ def run_git(cwd: Path, args: list[str], timeout: int = 30) -> str:
 
 
 def is_work_tree(path: Path) -> bool:
+    try:
+        if not path.is_dir():
+            return False
+    except OSError:
+        return False
     try:
         out = run_git(path, ["rev-parse", "--is-inside-work-tree"])
     except GitError:
