@@ -1,0 +1,13 @@
+---
+description: 日常レーンは PeRo 単体。短期ブランチは type/actor/target
+alwaysApply: true
+---
+
+# Git ブランチ命名
+
+- 日常レーンは `PeRo`（`main` と同じ単一名）。`PeRo/cursor` は禁止
+- Git は `PeRo` と `PeRo/<anything>` を共存できない
+- 短期: `<種別>/<主体>/<対象>`
+- 席あり直列で隔離が不要なら日常レーンへ直接 commit
+- 枝を切ったら一区切りまでその枝。日常レーンへは merge commit（`--no-ff`）
+- squash するとレーンが切れて見える（本ツールが見せる理由）

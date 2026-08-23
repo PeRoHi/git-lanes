@@ -1,0 +1,12 @@
+---
+description: 作業完了後は commit だけでなく push まで行う
+alwaysApply: true
+---
+
+# Git: 作業完了後は push まで
+
+- ユーザーが明示的に「commit だけ」と言わない限り、変更をコミットしたら **origin へ push まで**行う
+- remote がまだ無いときは push せず、その旨を報告する
+- push 前に `git status` / `git diff` で内容を確認する
+- 一時ファイル（`.tmp_*`、`logs/` 等）はコミットしない
+- force push はユーザー明示指示がある場合のみ

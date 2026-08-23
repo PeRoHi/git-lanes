@@ -1,0 +1,10 @@
+---
+description: 実装・改修・レビュー前に docs/DESIGN.md を読む
+alwaysApply: true
+---
+
+# 設計を正とする
+
+- 実装・改修・レビューの前に `docs/DESIGN.md` を読む
+- 設計とコードが矛盾したら、独断で片方を直さず確認する
+- 設計の「未実装」「Phase 4 までやらない」を MVP ブロッカーにしない
