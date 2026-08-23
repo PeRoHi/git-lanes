@@ -9,6 +9,10 @@ from urllib.parse import parse_qs, urlparse
 
 from git_lanes import HOST, INITIAL_LOAD, LOAD_MORE, PORT
 from git_lanes.discover import open_user_path, scan_and_merge
+from git_lanes.github import clone_named, fetch_named, list_remote_repos
+from git_lanes.github import logout as github_logout
+from git_lanes.github import start_login as github_start_login
+from git_lanes.github import status as github_status
 from git_lanes.gitio import GitError, is_work_tree, load_commit, load_graph
 from git_lanes.store import (
     load_state,
@@ -131,6 +135,38 @@ def _handle_api(method: str, parsed, body: bytes):
         save_state(st)
         rec = next(r for r in visible_repos() if r["id"] == rid)
         return _json_bytes({"repo": rec})
+
+    if path == "/api/github/status" and method == "GET":
+        return _json_bytes(github_status())
+
+    if path == "/api/github/login" and method == "POST":
+        return _json_bytes(github_start_login())
+
+    if path == "/api/github/logout" and method == "POST":
+        return _json_bytes(github_logout())
+
+    if path == "/api/github/repos" and method == "GET":
+        return _json_bytes(list_remote_repos())
+
+    if path == "/api/github/clone" and method == "POST":
+        try:
+            payload = json.loads(body.decode("utf-8") or "{}")
+        except json.JSONDecodeError as exc:
+            raise GitError("invalid json") from exc
+        nwo = str(payload.get("nameWithOwner") or payload.get("repo") or "")
+        if not nwo:
+            raise GitError("repo required")
+        return _json_bytes(clone_named(nwo))
+
+    if path == "/api/github/fetch" and method == "POST":
+        try:
+            payload = json.loads(body.decode("utf-8") or "{}")
+        except json.JSONDecodeError as exc:
+            raise GitError("invalid json") from exc
+        rid = str(payload.get("id") or payload.get("repo_id") or "")
+        if not rid:
+            raise GitError("id required")
+        return _json_bytes(fetch_named(rid))
 
     if path == "/api/graph" and method == "GET":
         rec, repo_path = _repo_from_id((qs.get("repo_id") or [""])[0] or None)

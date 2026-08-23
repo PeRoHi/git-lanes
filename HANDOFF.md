@@ -7,15 +7,16 @@
 Phase 1 + 複数リポ発見 + どの PC でも起動するランチャ。日常レーン `PeRo`。
 
 - 起動: `start.bat`（port 17920）。Python / Git / Edge は PATH 固定前提ではない
-- リポ一覧: 起動時スキャン + **Find my repos** + Open folder（親フォルダも可）
+- リポ一覧: 起動時スキャン + **Find my repos** + Open folder + 任意の **GitHub ログイン**（clone / fetch）
 - 設定: `%APPDATA%/git-lanes/`（PC ごと。コードに絶対パスを書かない）
-- GitHub: `PeRoHi/git-lanes` 予定。`gh` 未ログインなら remote 無しでもローカルは動く
+- GitHub: ログインは `gh`。token は gh のストア。このリポの GitHub 掲載（push）はまだ UI に出さない
 
 ## 次
 
-1. 別 PC（hidek など）で clone して `start.bat` が Python/Git 不足を MessageBox で言えるか
-2. Phase 2 残り: Branches フィルタ、Find
-3. `gh auth login` のあと private リポを作って push
+1. Git Lanes の GitHub → Sign in でこの PC の `gh` を通す
+2. 別 PC で clone して `start.bat`
+3. Phase 2 残り: Branches フィルタ、Find
+4. ログイン後、必要なら手元で `PeRoHi/git-lanes` を `gh repo create` して push
 
 ## 触らない
 

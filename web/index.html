@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Git Lanes</title>
-  <link rel="stylesheet" href="/style.css?v=7">
+  <link rel="stylesheet" href="/style.css?v=8">
 </head>
 <body>
   <header class="bar">
@@ -15,17 +15,32 @@
     </label>
     <button type="button" id="scanBtn">Find my repos</button>
     <button type="button" id="openBtn">Open folder</button>
+    <button type="button" id="ghBtn">GitHub</button>
     <span class="grow"></span>
     <span id="headLabel" class="muted"></span>
     <button type="button" id="refreshBtn">Refresh</button>
     <button type="button" id="quitBtn">Quit</button>
   </header>
 
+  <section id="ghPanel" class="gh-panel hidden">
+    <div class="gh-toolbar">
+      <span id="ghStatus" class="muted">GitHub: signed out</span>
+      <button type="button" id="ghLoginBtn">Sign in</button>
+      <button type="button" id="ghLogoutBtn" class="hidden">Sign out</button>
+      <button type="button" id="ghFetchBtn">Fetch this repo</button>
+      <span class="grow"></span>
+      <button type="button" id="ghCloseBtn">Close</button>
+    </div>
+    <p id="ghHint" class="muted gh-hint"></p>
+    <div id="ghList" class="gh-list"></div>
+  </section>
+
   <section id="empty" class="empty hidden">
-    <p>No git repo on this PC yet. Scan usual folders, or open one.</p>
+    <p>No git repo on this PC yet. Scan usual folders, open one, or sign in to GitHub.</p>
     <div class="empty-actions">
       <button type="button" id="emptyScanBtn">Find my repos</button>
       <button type="button" id="emptyOpenBtn">Open folder</button>
+      <button type="button" id="emptyGhBtn">GitHub sign in</button>
     </div>
   </section>
 
@@ -55,6 +70,6 @@
     <div id="detailBody"></div>
   </aside>
 
-  <script src="/app.js?v=7"></script>
+  <script src="/app.js?v=8"></script>
 </body>
 </html>

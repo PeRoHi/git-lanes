@@ -28,7 +28,7 @@ start.bat
 4. このリポを置く（例: `Desktop\program\git-lanes` でも `Desktop\個人用\program file\git-lanes` でも可）
 5. `start.bat`
 
-GitHub ログインは不要。初回にいつもの作業フォルダ（`Desktop\program` や `Desktop\個人用\program file`、このクローンの親）をスキャンして、そこにある Git リポを一覧へ入れる。
+GitHub ログインは **レーン図を見るだけなら不要**。GitHub 上のリポをこの PC に clone したり、private の origin を fetch したりするときだけ、画面の **GitHub → Sign in**（GitHub CLI `gh` が必要）。トークンは git-lanes には保存しない。
 
 ## 操作
 
@@ -36,6 +36,7 @@ GitHub ログインは不要。初回にいつもの作業フォルダ（`Deskto
 |---|---|
 | Find my repos | 既知の作業フォルダを再スキャンして、まだ無いリポを足す |
 | Open folder | 1リポを開く。Git でない親フォルダなら配下のリポをまとめて登録 |
+| GitHub | `gh` でログイン。GitHub 上の自分のリポを一覧し、未 clone なら Add、今のリポは Fetch |
 | Repo ドロップダウン | この PC に実在する登録済みリポを切替 |
 | 行クリック | 件名 / 本文 / 親 / 参照 |
 | Refresh / Ctrl+R | 再読込（fetch しない） |

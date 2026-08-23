@@ -23,6 +23,7 @@ const state = {
   laneCount: 1,
   selected: "",
   loading: false,
+  ghWait: null,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -394,6 +395,164 @@ async function findRepos() {
   }
 }
 
+function renderGhStatus(st) {
+  const label = $("ghStatus");
+  const loginBtn = $("ghLoginBtn");
+  const logoutBtn = $("ghLogoutBtn");
+  const header = $("ghBtn");
+  if (!st.gh_ok) {
+    label.textContent = "GitHub CLI not found";
+    loginBtn.classList.add("hidden");
+    logoutBtn.classList.add("hidden");
+    header.textContent = "GitHub";
+    $("ghHint").textContent = "Install gh from " + (st.install_url || "https://cli.github.com/");
+    return;
+  }
+  if (st.logged_in) {
+    label.textContent = "GitHub: " + st.user;
+    loginBtn.classList.add("hidden");
+    logoutBtn.classList.remove("hidden");
+    header.textContent = "@" + st.user;
+  } else {
+    label.textContent = "GitHub: signed out";
+    loginBtn.classList.remove("hidden");
+    logoutBtn.classList.add("hidden");
+    header.textContent = "GitHub";
+  }
+}
+
+function renderGhList(data) {
+  const box = $("ghList");
+  box.innerHTML = "";
+  const repos = data.repos || [];
+  if (!repos.length) {
+    box.textContent = data.logged_in ? "No GitHub repos returned." : "";
+    return;
+  }
+  for (const r of repos) {
+    const row = document.createElement("div");
+    row.className = "gh-row";
+    const name = document.createElement("span");
+    name.className = "name";
+    name.textContent = r.nameWithOwner || r.name;
+    row.appendChild(name);
+    if (r.private) {
+      const p = document.createElement("span");
+      p.className = "pill remote";
+      p.textContent = "private";
+      row.appendChild(p);
+    }
+    const btn = document.createElement("button");
+    btn.type = "button";
+    if (r.local && r.local.id) {
+      btn.textContent = "Open";
+      btn.addEventListener("click", async () => {
+        try {
+          await api("/api/repos/select", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: r.local.id }),
+          });
+          state.repoId = r.local.id;
+          $("repoSelect").value = state.repoId;
+          await loadGraph(true);
+        } catch (err) {
+          showError(String(err.message || err));
+        }
+      });
+    } else {
+      btn.textContent = "Add";
+      btn.addEventListener("click", () => cloneGithub(r.nameWithOwner, btn));
+    }
+    row.appendChild(btn);
+    box.appendChild(row);
+  }
+}
+
+async function refreshGithub(loadList) {
+  const st = await api("/api/github/status");
+  renderGhStatus(st);
+  if (loadList && st.logged_in) {
+    $("ghHint").textContent = "Clones go into this PC's usual program folder.";
+    const data = await api("/api/github/repos");
+    renderGhStatus(data);
+    renderGhList(data);
+  } else if (!st.logged_in) {
+    $("ghList").innerHTML = "";
+    if (st.gh_ok) {
+      $("ghHint").textContent =
+        "Sign in to list your GitHub repos and add missing clones. The graph itself stays local.";
+    }
+  }
+}
+
+async function openGithubPanel() {
+  $("ghPanel").classList.remove("hidden");
+  showError("");
+  try {
+    await refreshGithub(true);
+  } catch (err) {
+    showError(String(err.message || err));
+  }
+}
+
+async function githubLogin() {
+  showError("");
+  try {
+    const data = await api("/api/github/login", { method: "POST" });
+    if (data.already) {
+      await refreshGithub(true);
+      return;
+    }
+    $("ghHint").textContent =
+      "A console and browser opened. Finish GitHub sign-in, then this list will fill in.";
+    if (state.ghWait) clearInterval(state.ghWait);
+    let n = 0;
+    state.ghWait = setInterval(async () => {
+      n += 1;
+      try {
+        const st = await api("/api/github/status");
+        renderGhStatus(st);
+        if (st.logged_in) {
+          clearInterval(state.ghWait);
+          state.ghWait = null;
+          await refreshGithub(true);
+        } else if (n > 90) {
+          clearInterval(state.ghWait);
+          state.ghWait = null;
+        }
+      } catch (_) {
+        /* keep polling */
+      }
+    }, 2000);
+  } catch (err) {
+    showError(String(err.message || err));
+  }
+}
+
+async function cloneGithub(nwo, btn) {
+  showError("");
+  if (btn) btn.disabled = true;
+  try {
+    const data = await api("/api/github/clone", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nameWithOwner: nwo }),
+    });
+    await loadRepos();
+    if (data.repo && data.repo.id) {
+      state.repoId = data.repo.id;
+      $("repoSelect").value = state.repoId;
+    }
+    await refreshGithub(true);
+    await loadGraph(true);
+  } catch (err) {
+    showError(String(err.message || err));
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 async function quit() {
   try {
     await api("/api/shutdown", { method: "POST" });
@@ -403,10 +562,54 @@ async function quit() {
   window.close();
 }
 
+async function githubLogout() {
+  showError("");
+  try {
+    await api("/api/github/logout", { method: "POST" });
+    if (state.ghWait) {
+      clearInterval(state.ghWait);
+      state.ghWait = null;
+    }
+    await refreshGithub(true);
+  } catch (err) {
+    showError(String(err.message || err));
+  }
+}
+
+async function githubFetch() {
+  showError("");
+  if (!state.repoId) {
+    showError("Open a local repo first");
+    return;
+  }
+  $("ghFetchBtn").disabled = true;
+  try {
+    await api("/api/github/fetch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: state.repoId }),
+    });
+    await loadGraph(true);
+  } catch (err) {
+    showError(String(err.message || err));
+  } finally {
+    $("ghFetchBtn").disabled = false;
+  }
+}
+
 $("openBtn").addEventListener("click", openFolder);
 $("scanBtn").addEventListener("click", findRepos);
 $("emptyOpenBtn").addEventListener("click", openFolder);
 $("emptyScanBtn").addEventListener("click", findRepos);
+$("ghBtn").addEventListener("click", openGithubPanel);
+$("emptyGhBtn").addEventListener("click", () => {
+  openGithubPanel();
+  githubLogin();
+});
+$("ghLoginBtn").addEventListener("click", githubLogin);
+$("ghLogoutBtn").addEventListener("click", githubLogout);
+$("ghFetchBtn").addEventListener("click", githubFetch);
+$("ghCloseBtn").addEventListener("click", () => $("ghPanel").classList.add("hidden"));
 $("refreshBtn").addEventListener("click", () => loadGraph(true));
 $("quitBtn").addEventListener("click", quit);
 $("moreBtn").addEventListener("click", () => loadGraph(false));
@@ -448,6 +651,7 @@ window.addEventListener("pagehide", () => {
 
 (async function init() {
   try {
+    refreshGithub(false).catch(() => {});
     await loadRepos();
     if (!state.repos.length) {
       await findRepos();

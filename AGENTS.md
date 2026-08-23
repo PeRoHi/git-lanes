@@ -6,7 +6,7 @@
 
 - 個人用。他人配布なし
 - **セッション型**ローカル Web（ウィンドウ閉じ = サーバ停止）
-- MVP は Git の **閲覧のみ**
+- MVP は Git の **閲覧のみ**（clone / fetch は GitHub ログイン後の任意）
 - `life/universal-development-prompts-v1.md` をこの Git にコピーしない
 
 ## やってよい

@@ -43,8 +43,8 @@ IDE を開かずに同じものを見たくて既存手段を当たった。
 | 3 | 寿命 | **セッション型**。起動ショートカットのみ。ウィンドウ閉じ / UI「終了」でサーバ停止 |
 | 4 | UI | ローカル Web + Edge/Chrome `--app=`。gitk / Tk は使わない |
 | 5 | 見た目の目標 | Git Graph の **左レーン + 行ごとの Description / Date / Author / Commit**。gitk の分割ペインには寄せない |
-| 6 | データ源 | **ローカル `.git`**（未 push の枝・stash・作業ツリーを含む）。GitHub API は MVP に使わない |
-| 7 | 書き込み | MVP は **閲覧のみ**（checkout / merge / rebase / push は出さない） |
+| 6 | データ源 | **レーン図はローカル `.git`**（未 push の枝を含む）。GitHub Network は使わない。任意で **GitHub CLI (`gh`) ログイン**し、自分の GitHub リポの一覧・clone・`fetch` だけ足す |
+| 7 | 書き込み | グラフ操作は **閲覧のみ**（checkout / merge / rebase / push は出さない）。GitHub からの **clone / fetch** はログイン後に限って可 |
 | 8 | 対象機 | Windows。当面 localhost のみ（スマホ / Tailscale は非目標） |
 | 9 | 閲覧者 | 自分だけ |
 
@@ -121,6 +121,7 @@ Git Graph と同じ情報密度を目指す。上から下へ新しいコミッ�
 - リポ切り替え（ドロップダウン）
 - **Find my repos**（この PC の既知作業フォルダをスキャン）
 - **Open folder**（1リポ、または親フォルダ配下の Git をまとめて登録）
+- **GitHub**（任意。`gh` でログイン → リモート一覧、未 clone をこの PC に足す、今のリポを fetch）
 
 ### 3.2 操作（MVP）
 
@@ -272,7 +273,9 @@ MVP で使うコマンドの種類:
 
 ### 6.2 どの PC でも起動する
 
-依存は **Python 3.10+（stdlib のみ）・Git・Edge または Chrome**。venv は不要。GitHub ログインも不要。
+依存は **Python 3.10+（stdlib のみ）・Git・Edge または Chrome**。venv は不要。GitHub ログインは **任意**（レーン図だけ見るなら不要）。
+
+GitHub を使うときは同じ PC に **GitHub CLI (`gh`)** が入っていること。トークンは `gh` の資格情報ストアに置き、`config.json` には書かない。
 
 `start.bat` は `scripts\find-python.cmd` で `pythonw.exe` を探す。見つからなければ MessageBox。
 
@@ -292,9 +295,25 @@ Git が PATH に無くても `Program Files\Git\cmd\git.exe` などを探す。E
 2. このリポを好きな場所に clone / コピーする（パスはマシンごとに違ってよい）
 3. `start.bat` を実行する
 
+他の PC にまだ clone が無い GitHub リポを足すなら、Git Lanes の **GitHub → Sign in**（`gh auth login --web`）。
+
 ### 6.3 初回
 
-登録が空 → 既知ルートをスキャン → まだ空なら Find my repos / Open folder。
+登録が空 → 既知ルートをスキャン → まだ空なら Find my repos / Open folder / GitHub sign in。
+
+### 6.4 GitHub ログイン（任意）
+
+グラフの正は今も **ローカル `.git`**。GitHub.com の Network 図は出さない（未 push の枝が無い）。
+
+ログインが要るのは次だけ。
+
+- GitHub 上の自分のリポ一覧
+- この PC に無いリポを `gh repo clone` して登録
+- 今開いているリポの `git fetch --all`（private の origin を含む）
+
+流れ: UI の Sign in → コンソール + ブラウザで `gh auth login --web` → 戻ると一覧。Sign out は `gh auth logout`。
+
+このツール自体を `PeRoHi/git-lanes` に載せる **push は UI に出さない**（Phase 4）。ログイン後に手元で `gh repo create` する。
 
 ---
 
@@ -338,7 +357,7 @@ Git が PATH に無くても `Program Files\Git\cmd\git.exe` などを探す。E
 - bind は `127.0.0.1` のみ
 - 対象 path は登録リストか、ユーザーが選んだフォルダか、§6.1 の既知ルート。ディスク全体や任意の親辿りはしない
 - git 引数は配列。ユーザー入力をコマンド列に埋め込まない
-- 秘密情報・`.env` は不要（GitHub token も読まない）
+- 秘密情報は git-lanes のファイルに置かない。GitHub token は **`gh` のストアだけ**。API 応答にも載せない
 - コミット本文の URL は `http:` / `https:` だけリンク化
 
 ---
@@ -356,6 +375,7 @@ Git が PATH に無くても `Program Files\Git\cmd\git.exe` などを探す。E
 | `.git` が無いフォルダ | グラフを描かずエラー |
 | 既知ルート配下の Git | スキャンで登録される。`node_modules` 配下は対象外 |
 | この PC に無い登録 path | ドロップダウンに出さず、last-opened も飛ばす |
+| GitHub 未ログイン | `/api/github/status` は `logged_in: false`。clone はしない |
 
 Phase 1 の受け入れは「テスト緑」+ 実機で `life` か本リポの `PeRo` を目視。
 
@@ -383,6 +403,7 @@ Phase 1 の受け入れは「テスト緑」+ 実機で `life` か本リポの `
 
 - [x] 登録リポの切替（last-opened）
 - [x] 既知作業フォルダのスキャンと、どの PC でも起動できるランチャ
+- [x] GitHub CLI ログイン（一覧 / clone / fetch）。push は出さない
 - [ ] Branches フィルタ
 - [x] Load More / 末尾自動ロード
 - [ ] Find（件名 / ハッシュ / 参照）
@@ -423,3 +444,4 @@ Phase 1 の受け入れは「テスト緑」+ 実機で `life` か本リポの `
 | 2026-08-23 | Git Graph ソースは使わない | GPL-3.0。レーン計算は自前 | 固定 |
 | 2026-08-23 | GitHub リモートは `PeRoHi/git-lanes` 予定 | 他の個人ツールと同じ。この PC は `gh` 未ログインのため作成は後回し | 可逆 |
 | 2026-08-23 | 既知ルートのスキャン + PATH 非依存の起動 | 自分の他リポを足す。t230g / hidek で Desktop 形が違ってもコードに絶対パスを書かない | 可逆 |
+| 2026-08-23 | GitHub は `gh` ログイン任意。グラフはローカルのまま | リモートの自分のリポをこの PC に足す／fetch するため。token は gh 任せ。push UI は Phase 4 | 可逆 |

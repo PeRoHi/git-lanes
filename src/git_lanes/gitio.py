@@ -100,6 +100,17 @@ def toplevel(path: Path) -> Path:
     return Path(out)
 
 
+def origin_url(path: Path) -> str:
+    try:
+        return run_git(path, ["remote", "get-url", "origin"]).strip()
+    except GitError:
+        return ""
+
+
+def fetch_all(path: Path) -> str:
+    return run_git(path, ["fetch", "--all", "--prune"], timeout=120)
+
+
 def _parse_log(raw: str) -> list[Commit]:
     commits: list[Commit] = []
     if not raw:
