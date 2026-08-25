@@ -268,6 +268,32 @@ async function loadRepos() {
   renderRepos();
 }
 
+async function maybeFetchRemote() {
+  if (!state.repoId) return;
+  const st = await api("/api/github/status");
+  if (!st.logged_in) return;
+  $("headLabel").textContent = "Fetching...";
+  await api("/api/github/fetch", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id: state.repoId }),
+  });
+}
+
+async function refreshView(fetchRemote) {
+  if (state.loading) return;
+  state.loading = true;
+  showError("");
+  try {
+    if (fetchRemote) await maybeFetchRemote();
+  } catch (err) {
+    showError(String(err.message || err));
+  } finally {
+    state.loading = false;
+  }
+  await loadGraph(true);
+}
+
 async function loadGraph(reset) {
   if (state.loading) return;
   state.loading = true;
@@ -366,7 +392,7 @@ async function openFolder() {
       state.repoId = data.repo.id;
       $("repoSelect").value = state.repoId;
     }
-    await loadGraph(true);
+    await refreshView(true);
   } catch (err) {
     showError(String(err.message || err));
   }
@@ -387,7 +413,7 @@ async function findRepos() {
       state.repoId = data.repo.id;
       $("repoSelect").value = state.repoId;
     }
-    await loadGraph(true);
+    await refreshView(true);
   } catch (err) {
     showError(String(err.message || err));
   } finally {
@@ -496,7 +522,7 @@ async function openGithubLocal(id) {
     });
     state.repoId = id;
     $("repoSelect").value = state.repoId;
-    await loadGraph(true);
+    await refreshView(true);
     await refreshGithub(true);
   } catch (err) {
     showError(String(err.message || err));
@@ -580,7 +606,7 @@ async function cloneGithub(nwo, btn) {
       $("repoSelect").value = state.repoId;
     }
     await refreshGithub(true);
-    await loadGraph(true);
+    await refreshView(true);
   } catch (err) {
     showError(String(err.message || err));
   } finally {
@@ -612,21 +638,13 @@ async function githubLogout() {
 }
 
 async function githubFetch() {
-  showError("");
   if (!state.repoId) {
     showError("Open a local repo first");
     return;
   }
   $("ghFetchBtn").disabled = true;
   try {
-    await api("/api/github/fetch", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: state.repoId }),
-    });
-    await loadGraph(true);
-  } catch (err) {
-    showError(String(err.message || err));
+    await refreshView(true);
   } finally {
     $("ghFetchBtn").disabled = false;
   }
@@ -652,7 +670,7 @@ $("ghOpenDeviceBtn").addEventListener("click", async () => {
 $("ghLogoutBtn").addEventListener("click", githubLogout);
 $("ghFetchBtn").addEventListener("click", githubFetch);
 $("ghCloseBtn").addEventListener("click", () => $("ghPanel").classList.add("hidden"));
-$("refreshBtn").addEventListener("click", () => loadGraph(true));
+$("refreshBtn").addEventListener("click", () => refreshView(true));
 $("quitBtn").addEventListener("click", quit);
 $("moreBtn").addEventListener("click", () => loadGraph(false));
 $("detailClose").addEventListener("click", hideDetail);
@@ -666,7 +684,7 @@ $("repoSelect").addEventListener("change", async (ev) => {
       body: JSON.stringify({ id }),
     });
     state.repoId = id;
-    await loadGraph(true);
+    await refreshView(true);
   } catch (err) {
     showError(String(err.message || err));
   }
@@ -679,7 +697,7 @@ document.addEventListener("keydown", (ev) => {
   }
   if (ev.ctrlKey && ev.key.toLowerCase() === "r") {
     ev.preventDefault();
-    loadGraph(true);
+    refreshView(true);
   }
   if (ev.ctrlKey && ev.key.toLowerCase() === "h") {
     ev.preventDefault();
@@ -700,7 +718,7 @@ window.addEventListener("pagehide", () => {
       return;
     }
     state.repoId = state.lastOpened || "";
-    await loadGraph(true);
+    await refreshView(true);
   } catch (err) {
     showError(String(err.message || err));
   }

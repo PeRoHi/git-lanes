@@ -129,7 +129,7 @@ Git Graph と同じ情報密度を目指す。上から下へ新しいコミッ�
 |---|---|
 | リポ選択 | 登録済み一覧から切替。新規はフォルダ選択 |
 | Branches | All / 個別選択（Phase 1 は All だけでも可。フィルタは Phase 2） |
-| 更新 | 同じリポを再読込（`git fetch` はしない） |
+| 更新 | ログイン済みなら `git fetch --all` してから再描画。未ログインならローカル再読込 |
 | コミットクリック | 詳細パネル |
 | Ctrl+H | HEAD の行へスクロール |
 | Ctrl+R | 更新 |
@@ -311,6 +311,8 @@ Git が PATH に無くても `Program Files\Git\cmd\git.exe` などを探す。E
 - この PC に無いリポを `gh repo clone` して登録
 - 今開いているリポの `git fetch --all`（private の origin を含む）
 
+起動・リポ切替・Refresh は、ログイン済みなら fetch してから描く。checkout はしない。グラフに載るのは手元 `.git`（remote-tracking 含む）なので、クラウド側の最新を見るには fetch が要る。
+
 流れ: UI の Sign in → `gh` がワンタイムコードを出し、Git Lanes に大きく表示 → システムのブラウザで `github.com/login/device` を開く。コンソール窓は出さない。トークンは **`gh` の資格情報ストア**に残るので、Git Lanes を閉じても次起動で入ったまま。ユーザー名だけ `state.json` に覚え、Sign out（`gh auth logout`）で消す。Git Lanes のファイルに token は書かない。
 
 GitHub 一覧は行全体をクリックして開く／未 clone ならこの PC に足す（右端の小さな Open ボタンだけではない）。
@@ -448,3 +450,4 @@ Phase 1 の受け入れは「テスト緑」+ 実機で `life` か本リポの `
 | 2026-08-23 | 既知ルートのスキャン + PATH 非依存の起動 | 自分の他リポを足す。t230g / hidek で Desktop 形が違ってもコードに絶対パスを書かない | 可逆 |
 | 2026-08-23 | GitHub は `gh` ログイン任意。グラフはローカルのまま | リモートの自分のリポをこの PC に足す／fetch するため。token は gh 任せ。push UI は Phase 4 | 可逆 |
 | 2026-08-23 | ログインは Sign out までこの PC に残す。一覧は行全体クリック | ウィンドウを閉じても再ログインしない。token は gh ストア、ユーザー名だけ state.json | 可逆 |
+| 2026-08-25 | ログイン済みなら起動・切替・Refresh で fetch | クラウドの最新 remote 枝が見えない。checkout はしない | 可逆 |

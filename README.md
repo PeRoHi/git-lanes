@@ -39,7 +39,7 @@ GitHub ログインは **レーン図を見るだけなら不要**。GitHub 上�
 | GitHub | `gh` でログイン。GitHub 上の自分のリポを一覧し、未 clone なら Add、今のリポは Fetch |
 | Repo ドロップダウン | この PC に実在する登録済みリポを切替 |
 | 行クリック | 件名 / 本文 / 親 / 参照 |
-| Refresh / Ctrl+R | 再読込（fetch しない） |
+| Refresh / Ctrl+R | ログイン済みなら fetch してから再描画。未ログインなら手元の再読込 |
 | Ctrl+H | HEAD へスクロール |
 | Esc | 詳細を閉じる |
 | Quit / ウィンドウ閉じ | サーバ停止 |
