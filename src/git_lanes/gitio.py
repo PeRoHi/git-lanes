@@ -295,8 +295,141 @@ def _has_uncommitted(path: Path) -> bool:
     return bool(raw.strip())
 
 
+def _check_rev(path: Path, rev: str) -> str:
+    name = str(rev or "").strip()
+    if not name:
+        return ""
+    if name.startswith("-") or ".." in name:
+        raise GitError("invalid ref")
+    if not re.fullmatch(r"[A-Za-z0-9._/\-@{}]+", name):
+        raise GitError("invalid ref")
+    try:
+        run_git(path, ["rev-parse", "--verify", "--quiet", name + "^{commit}"])
+    except GitError as exc:
+        raise GitError("unknown ref") from exc
+    return name
+
+
+def _stash_commits(path: Path) -> list[Commit]:
+    try:
+        raw = run_git(
+            path,
+            [
+                "stash",
+                "list",
+                f"--format=%H{FIELD_SEP}%P{FIELD_SEP}%an{FIELD_SEP}%at{FIELD_SEP}%s{FIELD_SEP}%gd",
+            ],
+        )
+    except GitError:
+        return []
+    out: list[Commit] = []
+    for line in raw.splitlines():
+        if not line.strip():
+            continue
+        bits = line.split(FIELD_SEP)
+        if len(bits) < 6:
+            continue
+        try:
+            author_at = int((bits[3] or "0").strip() or "0")
+        except ValueError:
+            author_at = 0
+        label = bits[5].strip() or "stash"
+        out.append(
+            Commit(
+                hash=bits[0].strip(),
+                parents=[p for p in bits[1].split() if p],
+                author=bits[2],
+                author_at=author_at,
+                subject=bits[4],
+                refs=[label],
+                stash=True,
+            )
+        )
+    return out
+
+
+def list_changed_files(path: Path, chash: str) -> list[dict]:
+    files: list[dict] = []
+    if chash == UNCOMMITTED:
+        raw = run_git(path, ["status", "--porcelain=v1"])
+        for line in raw.splitlines():
+            if len(line) < 4:
+                continue
+            status = line[:2].strip() or line[0]
+            rel = line[3:]
+            if rel.startswith('"') and rel.endswith('"'):
+                rel = rel[1:-1]
+            if " -> " in rel:
+                rel = rel.split(" -> ", 1)[-1]
+            files.append({"status": status, "path": rel})
+        return files
+    if not all(c in "0123456789abcdefABCDEF" for c in chash) or len(chash) < 7:
+        raise GitError("invalid commit hash")
+    spec = run_git(path, ["rev-list", "--parents", "-n", "1", chash]).strip().split()
+    if len(spec) >= 2:
+        raw = run_git(path, ["diff", "--name-status", "-M", spec[1], spec[0]])
+    else:
+        raw = run_git(
+            path,
+            ["diff-tree", "--no-commit-id", "--name-status", "-r", "--root", chash],
+        )
+    for line in raw.splitlines():
+        if not line.strip():
+            continue
+        parts = line.split("\t")
+        if len(parts) == 2:
+            files.append({"status": parts[0], "path": parts[1]})
+        elif len(parts) >= 3:
+            files.append({"status": parts[0], "path": parts[-1], "from": parts[1]})
+    return files
+
+
+def search_commits(path: Path, query: str, limit: int = 25) -> list[dict]:
+    q = str(query or "").strip()
+    if not q or q.startswith("-") or "\n" in q or "\r" in q:
+        return []
+    if len(q) > 200:
+        q = q[:200]
+    limit = min(max(int(limit), 1), 50)
+    pretty = f"%x1e%H%x1f%P%x1f%an%x1f%at%x1f%s%x1f%b"
+    hits: list[Commit] = []
+    if re.fullmatch(r"[0-9a-fA-F]{4,40}", q):
+        try:
+            raw = run_git(
+                path,
+                ["log", "-1", "--all", f"--pretty=format:{pretty}", q],
+            )
+            hits = _parse_log(raw)
+        except GitError:
+            hits = []
+    if not hits:
+        raw = run_git(
+            path,
+            [
+                "log",
+                "--all",
+                "--date-order",
+                "-i",
+                "--fixed-strings",
+                f"--grep={q}",
+                f"-n{limit}",
+                f"--pretty=format:{pretty}",
+            ],
+        )
+        hits = _parse_log(raw)
+    _, _, refs = _load_refs(path)
+    out = []
+    for c in hits[:limit]:
+        c.refs = refs.get(c.hash, [])
+        row = c.to_json()
+        row["kind"] = "commit"
+        row["name"] = (c.hash or "")[:8]
+        out.append(row)
+    return out
+
+
 def load_graph(
-    path: Path, offset: int = 0, limit: int = 300
+    path: Path, offset: int = 0, limit: int = 300, rev: str = ""
 ) -> dict:
     if offset < 0 or limit < 1:
         raise GitError("invalid offset or limit")
@@ -304,46 +437,51 @@ def load_graph(
     pretty = (
         f"%x1e%H%x1f%P%x1f%an%x1f%at%x1f%s%x1f%b"
     )
-    raw = run_git(
-        path,
-        [
-            "log",
-            "--all",
-            "--date-order",
-            f"-n{want}",
-            f"--pretty=format:{pretty}",
-        ],
-    )
+    checked = _check_rev(path, rev) if str(rev or "").strip() else ""
+    log_cmd = [
+        "log",
+        "--date-order",
+        f"-n{want}",
+        f"--pretty=format:{pretty}",
+    ]
+    log_cmd.append(checked if checked else "--all")
+    raw = run_git(path, log_cmd)
     git_commits = _parse_log(raw)
     has_more = len(git_commits) > offset + limit
     git_commits = git_commits[: offset + limit]
+    head_hash, head_name, refs = _load_refs(path)
     if not git_commits:
         return {
-            "head": "",
-            "head_hash": "",
+            "head": head_name or (head_hash[:8] if head_hash else ""),
+            "head_hash": head_hash,
+            "ref": checked,
             "has_more": False,
             "lane_count": 1,
             "commits": [],
         }
-    head_hash, head_name, refs = _load_refs(path)
     for c in git_commits:
         c.refs = refs.get(c.hash, [])
 
-    rows = git_commits
-    if _has_uncommitted(path) and git_commits:
-        parent = head_hash if head_hash else git_commits[0].hash
-        rows = [
-            Commit(
-                hash=UNCOMMITTED,
-                parents=[parent],
-                author="",
-                author_at=git_commits[0].author_at,
-                subject="Uncommitted changes",
-                refs=[],
-                uncommitted=True,
-            ),
-            *git_commits,
-        ]
+    extras: list[Commit] = []
+    if not checked:
+        if _has_uncommitted(path):
+            parent = head_hash if head_hash else git_commits[0].hash
+            extras.append(
+                Commit(
+                    hash=UNCOMMITTED,
+                    parents=[parent],
+                    author="",
+                    author_at=git_commits[0].author_at,
+                    subject="Uncommitted changes",
+                    refs=[],
+                    uncommitted=True,
+                )
+            )
+        extras.extend(_stash_commits(path))
+    stash_hashes = {c.hash for c in extras if c.stash}
+    if stash_hashes:
+        git_commits = [c for c in git_commits if c.hash not in stash_hashes]
+    rows = extras + git_commits
 
     assign_lanes(rows)
     page = rows[offset : offset + limit]
@@ -358,6 +496,7 @@ def load_graph(
     return {
         "head": head_name or head_hash[:8],
         "head_hash": head_hash,
+        "ref": checked,
         "has_more": has_more,
         "lane_count": lane_count,
         "commits": [c.to_json() for c in page],
@@ -377,6 +516,8 @@ def load_commit(path: Path, chash: str) -> dict:
             "body": status.strip("\n"),
             "refs": [],
             "uncommitted": True,
+            "stash": False,
+            "files": list_changed_files(path, UNCOMMITTED),
             "head": head_name,
         }
     if not all(c in "0123456789abcdefABCDEF" for c in chash) or len(chash) < 7:
@@ -400,5 +541,7 @@ def load_commit(path: Path, chash: str) -> dict:
         "body": parts[5].strip("\n"),
         "refs": refs.get(full, []),
         "uncommitted": False,
+        "stash": False,
+        "files": list_changed_files(path, full),
         "head": head_name,
     }

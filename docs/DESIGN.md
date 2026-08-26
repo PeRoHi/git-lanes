@@ -1,7 +1,7 @@
 # Git Lanes — 設計書（v0.1）
 
-最終更新: 2026-08-23  
-ステータス: **Phase 1 MVP 実装済み**  
+最終更新: 2026-08-26  
+ステータス: **Phase 2 まで実装済み**（Phase 3 の 2 コミット比較は未）  
 閲覧者: **自分だけ**（他人配布なし）
 
 ---
@@ -96,7 +96,8 @@ Git Graph と同じ情報密度を目指す。上から下へ新しいコミッ�
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│ Git Lanes  [リポ v]  [Find my repos] [Open folder]  [更新] [終了] │
+│ Git Lanes  [Repo v]  [Find branch/subject/hash]  [Refresh] [☰] [Quit] │
+│ [All branches] [feat ×]                         HEAD name [N behind] │
 ├────┬──────────────────────────────────┬──────────┬────────┬──────┤
 │Graph│ Description                      │ Date     │ Author │Commit│
 ├────┼──────────────────────────────────┼──────────┼────────┼──────┤
@@ -106,7 +107,7 @@ Git Graph と同じ情報密度を目指す。上から下へ新しいコミッ�
 │ |/ │                                  │          │        │      │
 │ *  │ docs: design v0.1                │ yesterday│ pero   │ e5f6 │
 └────┴──────────────────────────────────┴──────────┴────────┴──────┘
-│ 詳細: 件名 / 本文 / 親ハッシュ / 参照一覧                         │
+│ 詳細: 件名 / 本文 / 親 / 参照 / 変更ファイル（パスのみ）           │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -115,12 +116,11 @@ Git Graph と同じ情報密度を目指す。上から下へ新しいコミッ�
 - 左に **色付きレーン**。merge は線が合流し、squash は合流しない
 - 各行に **参照ラベル**（`HEAD`、ローカル枝、remote 枝、tag）
 - Description / Date / Author / 短縮ハッシュ
-- 未コミット変更があるときは最上段に **Uncommitted** 行
-- 初期は **全枝**（`git log --all` 相当）
-- コミットクリックで下（または右）に詳細
+- 未コミット変更があるときは最上段に **Uncommitted** 行。stash はその下
+- 初期は **全枝**（`git log --all` 相当）。Find の **Only** でその枝の祖先だけ
+- コミットクリックで下（または右）に詳細（変更ファイルのパス。diff 本体は出さない）
 - リポ切り替え（ドロップダウン）
-- **Find my repos**（この PC の既知作業フォルダをスキャン）
-- **Open folder**（1リポ、または親フォルダ配下の Git をまとめて登録）
+- **☰** に **Find my repos** / **Open folder** / **GitHub**（常時出さない）
 - **GitHub**（任意。`gh` でログイン → リモート一覧、未 clone をこの PC に足す、今のリポを fetch）
 
 ### 3.2 操作（MVP）
@@ -128,10 +128,11 @@ Git Graph と同じ情報密度を目指す。上から下へ新しいコミッ�
 | 操作 | 動作 |
 |---|---|
 | リポ選択 | 登録済み一覧から切替。新規はフォルダ選択 |
-| Branches | All / 個別選択（Phase 1 は All だけでも可。フィルタは Phase 2） |
+| Branches | All / 個別選択（Find の Only、または 2 行目のチップ） |
 | 更新 | ログイン済みなら `git fetch --all` してから再描画。未ログインならローカル再読込 |
-| コミットクリック | 詳細パネル |
-| ブランチ検索 | 参照名で絞り、先端の件名・日付・ハッシュを出す。Enter / クリックでその行へ。Ctrl+F |
+| コミットクリック | 詳細パネル（件名・本文・親・参照・変更ファイル） |
+| 検索 | 枝 / tag / 件名 / ハッシュ。先端へジャンプ、または Only でグラフ絞り込み。Ctrl+F |
+| ☰ | Find my repos / Open folder / GitHub |
 | Ctrl+H | HEAD の行へスクロール |
 | Ctrl+R | 更新 |
 | Esc / 終了 | 詳細を閉じる / アプリ終了 |
@@ -171,7 +172,8 @@ MVP で使うコマンドの種類:
 - `git log --all --date-order`（または `--topo-order`。既定は date-order で Git Graph に寄せる）
 - pretty: ハッシュ、親、author、author time、subject、body
 - `git for-each-ref`（heads / remotes / tags）
-- `git stash list`（任意。Phase 1 では無くてもよい）
+- `git stash list`（グラフ先頭付近の stash 行）
+- `git diff --name-status` / `git status --porcelain`（詳細の変更ファイル。diff 本体は出さない）
 
 初期ロード件数: **300**。末尾まで来たら追加 300（Git Graph の Initial Load / Load More と同型）。
 
@@ -203,9 +205,10 @@ MVP で使うコマンドの種類:
 | `GET /api/health` | ready。起動スクリプトがブラウザを開く前に待つ |
 | `GET /api/repos` | 登録リポ一覧 + last-opened |
 | `POST /api/repos/open` | フォルダを登録して対象にする |
-| `GET /api/graph?repo_id=&offset=&limit=` | レーン付きコミット配列 |
+| `GET /api/graph?repo_id=&offset=&limit=&ref=` | レーン付きコミット配列。`ref` があればその祖先だけ |
 | `GET /api/refs?repo_id=` | ローカル / remote / tag の先端（件名・日付・upstream の ahead/behind） |
-| `GET /api/commit?repo_id=&hash=` | 詳細（件名、本文、親、参照） |
+| `GET /api/search?repo_id=&q=` | 件名 / ハッシュのコミット検索 |
+| `GET /api/commit?repo_id=&hash=` | 詳細（件名、本文、親、参照、変更ファイル） |
 | `POST /api/shutdown` | サーバ停止。ウィンドウ閉じと同じロック |
 
 書き込み系 git は置かない。
@@ -410,16 +413,16 @@ Phase 1 の受け入れは「テスト緑」+ 実機で `life` か本リポの `
 - [x] 登録リポの切替（last-opened）
 - [x] 既知作業フォルダのスキャンと、どの PC でも起動できるランチャ
 - [x] GitHub CLI ログイン（一覧 / clone / fetch）。push は出さない
-- [ ] Branches フィルタ（グラフをその枝だけに絞る）
+- [x] Branches フィルタ（グラフをその枝だけに絞る）
 - [x] Load More / 末尾自動ロード
-- [x] 参照検索と先端ジャンプ（件名 / ハッシュ検索は未）
+- [x] 参照検索と先端ジャンプ（件名 / ハッシュ検索を含む）
 - [x] HEAD へスクロール（Ctrl+H）
 
 ### Phase 3 — 詳細の厚み（任意）
 
-- [ ] 変更ファイル一覧（diff 本体は OS の既存ツールか後続）
+- [x] 変更ファイル一覧（diff 本体は OS の既存ツールか後続）
 - [ ] 2 コミット比較
-- [ ] stash 行
+- [x] stash 行
 
 ### Phase 4 — 書き込み（明示 GO が無い限りやらない）
 
@@ -454,3 +457,4 @@ Phase 1 の受け入れは「テスト緑」+ 実機で `life` か本リポの `
 | 2026-08-23 | ログインは Sign out までこの PC に残す。一覧は行全体クリック | ウィンドウを閉じても再ログインしない。token は gh ストア、ユーザー名だけ state.json | 可逆 |
 | 2026-08-25 | ログイン済みなら起動・切替・Refresh で fetch | クラウドの最新 remote 枝が見えない。checkout はしない | 可逆 |
 | 2026-08-26 | ブランチ検索は先端ジャンプ。グラフ絞り込みは後 | Grok 枝の最新位置を探す。checkout はしない | 可逆 |
+| 2026-08-26 | ヘッダは 2 行 + ☰。Find は枝・件名・ハッシュ。Only でその枝だけ。詳細にファイル一覧。stash 行 | 1 行だと折り返す。稀な操作はメニューへ | 可逆 |

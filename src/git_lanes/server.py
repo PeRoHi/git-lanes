@@ -14,7 +14,14 @@ from git_lanes.github import logout as github_logout
 from git_lanes.github import open_device_page
 from git_lanes.github import start_login as github_start_login
 from git_lanes.github import status as github_status
-from git_lanes.gitio import GitError, is_work_tree, list_refs, load_commit, load_graph
+from git_lanes.gitio import (
+    GitError,
+    is_work_tree,
+    list_refs,
+    load_commit,
+    load_graph,
+    search_commits,
+)
 from git_lanes.store import (
     load_state,
     pick_last_or_none,
@@ -184,7 +191,8 @@ def _handle_api(method: str, parsed, body: bytes):
         except ValueError as exc:
             raise GitError("invalid paging") from exc
         limit = min(max(limit, 1), LOAD_MORE * 2)
-        data = load_graph(repo_path, offset=offset, limit=limit)
+        rev = (qs.get("ref") or [""])[0]
+        data = load_graph(repo_path, offset=offset, limit=limit, rev=rev)
         data["need_open"] = False
         data["repo"] = {
             "id": rec["id"],
@@ -193,6 +201,17 @@ def _handle_api(method: str, parsed, body: bytes):
             "head": data.get("head") or "",
         }
         return _json_bytes(data)
+
+    if path == "/api/search" and method == "GET":
+        rec, repo_path = _repo_from_id((qs.get("repo_id") or [""])[0] or None)
+        if rec is None:
+            return _json_bytes({"need_open": True, "commits": []})
+        if repo_path is None or not is_work_tree(repo_path):
+            raise GitError("not a git repository")
+        q = (qs.get("q") or [""])[0]
+        return _json_bytes(
+            {"need_open": False, "commits": search_commits(repo_path, q)}
+        )
 
     if path == "/api/refs" and method == "GET":
         rec, repo_path = _repo_from_id((qs.get("repo_id") or [""])[0] or None)

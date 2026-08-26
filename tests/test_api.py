@@ -122,6 +122,20 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(tip["hash"], chash)
         self.assertEqual(tip["subject"], "a")
 
+        status, body = self._json(f"/api/graph?repo_id={rid}&ref=main")
+        self.assertEqual(status, 200, body)
+        self.assertGreaterEqual(len(body["commits"]), 1)
+
+        status, body = self._json(f"/api/search?repo_id={rid}&q=a")
+        self.assertEqual(status, 200, body)
+        self.assertTrue(any(c.get("subject") == "a" for c in body["commits"]))
+
+        status, body = self._json(f"/api/commit?repo_id={rid}&hash={chash}")
+        self.assertTrue(any(f.get("path") == "a.txt" for f in body.get("files") or []))
+
+        status, body = self._json(f"/api/graph?repo_id={rid}&ref=no-such-branch")
+        self.assertEqual(status, 400)
+
         bogus = Path(self.tmp.name) / "nogit"
         bogus.mkdir()
         status, body = self._json("/api/repos/open", {"path": str(bogus)})

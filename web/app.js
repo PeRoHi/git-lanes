@@ -27,6 +27,10 @@ const state = {
   refs: [],
   refHits: [],
   refActive: 0,
+  filterRev: "",
+  searchHits: [],
+  searchGen: 0,
+  searchTimer: 0,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -55,6 +59,7 @@ function esc(s) {
 function pillClass(ref) {
   if (ref.startsWith("HEAD")) return "head";
   if (ref.startsWith("tag:")) return "tag";
+  if (ref.startsWith("stash")) return "stash";
   if (ref.includes("/")) return "remote";
   return "branch";
 }
@@ -189,7 +194,7 @@ function drawGraph(commits, laneCount) {
     const stroke = color(c.lane);
     ctx.beginPath();
     ctx.arc(cx, cy, 4, 0, Math.PI * 2);
-    ctx.fillStyle = c.uncommitted ? "#1c1c1c" : stroke;
+    ctx.fillStyle = c.uncommitted || c.stash ? "#1c1c1c" : stroke;
     ctx.strokeStyle = stroke;
     ctx.lineWidth = 2;
     ctx.lineCap = "butt";
@@ -231,7 +236,7 @@ function renderRows() {
       .join("");
     const extra = c.uncommitted
       ? `<span class="pill uncommitted">Uncommitted</span>`
-      : refs;
+      : (c.stash ? `<span class="pill stash">Stash</span>` : "") + refs;
     row.innerHTML = `
       <div class="col-graph graph-cell"></div>
       <div class="col-desc">${extra}${esc(c.subject || "")}</div>
@@ -275,7 +280,7 @@ async function maybeFetchRemote() {
   if (!state.repoId) return;
   const st = await api("/api/github/status");
   if (!st.logged_in) return;
-  $("headLabel").textContent = "Fetching...";
+  setHeadText("Fetching...", "");
   await api("/api/github/fetch", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -302,18 +307,23 @@ async function loadGraph(reset) {
   state.loading = true;
   showError("");
   try {
-    const offset = reset ? 0 : state.commits.filter((c) => !c.uncommitted).length;
+    const offset = reset
+      ? 0
+      : state.commits.filter((c) => !c.uncommitted && !c.stash).length;
     const q = new URLSearchParams();
     if (state.repoId) q.set("repo_id", state.repoId);
     q.set("offset", String(reset ? 0 : offset));
     q.set("limit", "300");
+    if (state.filterRev) q.set("ref", state.filterRev);
     const data = await api("/api/graph?" + q.toString());
     if (data.need_open) {
       $("tableWrap").classList.add("hidden");
       $("empty").classList.remove("hidden");
-      $("headLabel").textContent = "";
+      setHeadText("", "");
       state.refs = [];
+      state.filterRev = "";
       hideRefResults();
+      renderFilterChips();
       return;
     }
     $("empty").classList.add("hidden");
@@ -321,8 +331,9 @@ async function loadGraph(reset) {
     if (data.repo) {
       state.repoId = data.repo.id;
       $("repoSelect").value = state.repoId;
-      $("headLabel").textContent = data.repo.head ? "HEAD " + data.repo.head : "";
+      setHeadText(data.repo.head ? "HEAD " + data.repo.head : "", "");
     }
+    renderFilterChips();
     if (reset) {
       state.commits = data.commits || [];
       state.selected = "";
@@ -368,16 +379,65 @@ function trackLabel(ref) {
   return bits.join(", ");
 }
 
+function setHeadText(text, track) {
+  const name = $("headName");
+  const pill = $("headTrack");
+  if (name) name.textContent = text || "";
+  if (!pill) return;
+  if (track) {
+    pill.textContent = track;
+    pill.classList.remove("hidden");
+  } else {
+    pill.textContent = "";
+    pill.classList.add("hidden");
+  }
+}
+
 function applyHeadLabel() {
-  const headName = ($("headLabel").textContent || "").replace(/^HEAD\s+/, "").split(" · ")[0];
   const current =
     state.refs.find((r) => r.current && r.kind === "local") ||
-    state.refs.find((r) => r.kind === "local" && r.name === headName);
-  if (!current) return;
-  const track = trackLabel(current);
-  $("headLabel").textContent = track
-    ? "HEAD " + current.name + " · " + track
-    : "HEAD " + current.name;
+    state.refs.find((r) => r.kind === "local" && ("HEAD " + r.name) === ($("headName").textContent || ""));
+  const fallback = ($("headName").textContent || "").trim();
+  if (!current) {
+    if (fallback) setHeadText(fallback, "");
+    return;
+  }
+  const bits = [];
+  if (current.behind) bits.push(current.behind + " behind");
+  if (current.ahead) bits.push(current.ahead + " ahead");
+  setHeadText("HEAD " + current.name, bits.join(" · "));
+  const pill = $("headTrack");
+  if (pill && bits.length) pill.title = trackLabel(current);
+}
+
+function renderFilterChips() {
+  const box = $("filterChips");
+  if (!box) return;
+  box.innerHTML = "";
+  const all = document.createElement("button");
+  all.type = "button";
+  all.className = "chip" + (state.filterRev ? "" : " active");
+  all.textContent = "All branches";
+  all.addEventListener("click", () => setFilter(""));
+  box.appendChild(all);
+  if (state.filterRev) {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "chip active";
+    chip.textContent = state.filterRev + " ×";
+    chip.title = "Show all branches";
+    chip.addEventListener("click", () => setFilter(""));
+    box.appendChild(chip);
+  }
+}
+
+async function setFilter(rev) {
+  const next = String(rev || "");
+  if (state.filterRev === next) return;
+  state.filterRev = next;
+  renderFilterChips();
+  hideRefResults();
+  await loadGraph(true);
 }
 
 async function loadRefs() {
@@ -428,48 +488,110 @@ function hideRefResults() {
   state.refActive = 0;
 }
 
+function scheduleCommitSearch(query) {
+  window.clearTimeout(state.searchTimer);
+  const q = String(query || "").trim();
+  if (q.length < 2) {
+    state.searchHits = [];
+    state.searchGen += 1;
+    return;
+  }
+  const gen = ++state.searchGen;
+  state.searchTimer = window.setTimeout(async () => {
+    if (!state.repoId) return;
+    try {
+      const params = new URLSearchParams({
+        repo_id: state.repoId,
+        q,
+      });
+      const data = await api("/api/search?" + params.toString());
+      if (gen !== state.searchGen) return;
+      state.searchHits = data.commits || [];
+      if (!$("refResults").classList.contains("hidden")) renderRefResults();
+    } catch (_) {
+      if (gen !== state.searchGen) return;
+      state.searchHits = [];
+    }
+  }, 220);
+}
+
 function renderRefResults() {
   const box = $("refResults");
   const q = $("refSearch").value;
-  const hits = filterRefs(q);
+  const refs = filterRefs(q);
+  const commits = String(q || "").trim() ? state.searchHits : [];
+  const hits = [];
+  refs.forEach((ref) => hits.push({ type: "ref", ref }));
+  commits.forEach((commit) => hits.push({ type: "commit", commit }));
   state.refHits = hits;
   if (state.refActive >= hits.length) state.refActive = Math.max(0, hits.length - 1);
   box.innerHTML = "";
   if (!hits.length) {
     const empty = document.createElement("div");
     empty.className = "ref-empty";
-    empty.textContent = state.refs.length ? "No matching branch." : "Open a repo first.";
+    if (!state.refs.length && !state.repoId) empty.textContent = "Open a repo first.";
+    else if (String(q || "").trim().length >= 2) empty.textContent = "No matching branch or commit.";
+    else empty.textContent = state.refs.length ? "No matching branch." : "Open a repo first.";
     box.appendChild(empty);
     box.classList.remove("hidden");
     return;
   }
-  hits.forEach((ref, i) => {
-    const row = document.createElement("button");
-    row.type = "button";
+  hits.forEach((hit, i) => {
+    const row = document.createElement("div");
     row.className = "ref-hit" + (i === state.refActive ? " active" : "");
     row.setAttribute("role", "option");
     const top = document.createElement("div");
     top.className = "top";
     const pill = document.createElement("span");
-    pill.className = "pill " + (ref.kind === "tag" ? "tag" : ref.kind === "remote" ? "remote" : "branch");
-    pill.textContent = ref.kind;
     const name = document.createElement("span");
     name.className = "name";
-    name.textContent = ref.name + (ref.current ? " (HEAD)" : "");
     const meta = document.createElement("span");
     meta.className = "meta";
-    meta.textContent = (ref.hash || "").slice(0, 8) + " · " + relTime(ref.author_at);
-    top.appendChild(pill);
-    top.appendChild(name);
-    top.appendChild(meta);
-    row.appendChild(top);
     const sub = document.createElement("div");
     sub.className = "subject";
-    const track = trackLabel(ref);
-    sub.textContent = (ref.subject || "") + (track ? " · " + track : "");
-    row.appendChild(sub);
+    if (hit.type === "ref") {
+      const ref = hit.ref;
+      pill.className = "pill " + (ref.kind === "tag" ? "tag" : ref.kind === "remote" ? "remote" : "branch");
+      pill.textContent = ref.kind;
+      name.textContent = ref.name + (ref.current ? " (HEAD)" : "");
+      meta.textContent = (ref.hash || "").slice(0, 8) + " · " + relTime(ref.author_at);
+      const track = trackLabel(ref);
+      sub.textContent = (ref.subject || "") + (track ? " · " + track : "");
+      const only = document.createElement("button");
+      only.type = "button";
+      only.className = "only";
+      only.textContent = "Only";
+      only.title = "Show this branch only";
+      only.addEventListener("mousedown", (ev) => ev.preventDefault());
+      only.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        hideRefResults();
+        setFilter(ref.name);
+      });
+      top.appendChild(pill);
+      top.appendChild(name);
+      top.appendChild(meta);
+      top.appendChild(only);
+      row.addEventListener("click", () => jumpToRef(ref));
+    } else {
+      const c = hit.commit;
+      pill.className = "pill tag";
+      pill.textContent = "commit";
+      name.textContent = (c.hash || "").slice(0, 8);
+      meta.textContent = relTime(c.author_at);
+      sub.textContent = c.subject || "";
+      top.appendChild(pill);
+      top.appendChild(name);
+      top.appendChild(meta);
+      row.addEventListener("click", () => {
+        hideRefResults();
+        jumpToHash(c.hash);
+      });
+    }
     row.addEventListener("mousedown", (ev) => ev.preventDefault());
-    row.addEventListener("click", () => jumpToRef(ref));
+    row.appendChild(top);
+    row.appendChild(sub);
     box.appendChild(row);
   });
   box.classList.remove("hidden");
@@ -517,12 +639,20 @@ async function selectCommit(hash) {
     const data = await api("/api/commit?" + q.toString());
     const refs = (data.refs || []).join(", ");
     const parents = (data.parents || []).map((p) => p.slice(0, 8)).join(", ");
+    const files = (data.files || [])
+      .map((f) => {
+        const st = esc(f.status || "");
+        const p = esc(f.path || "");
+        return `<li><code>${st}</code>${p}</li>`;
+      })
+      .join("");
     $("detailBody").innerHTML = `
       <h2>${linkify(data.subject || "")}</h2>
-      <div class="kv"><b>Commit</b> ${data.uncommitted ? "uncommitted" : data.hash}</div>
-      <div class="kv"><b>Author</b> ${data.author || "-"}</div>
-      <div class="kv"><b>Parents</b> ${parents || "-"}</div>
-      <div class="kv"><b>Refs</b> ${refs || "-"}</div>
+      <div class="kv"><b>Commit</b> ${data.uncommitted ? "uncommitted" : esc(data.hash || "")}</div>
+      <div class="kv"><b>Author</b> ${esc(data.author || "-")}</div>
+      <div class="kv"><b>Parents</b> ${esc(parents || "-")}</div>
+      <div class="kv"><b>Refs</b> ${esc(refs || "-")}</div>
+      ${files ? `<div class="kv"><b>Files</b></div><ul class="file-list">${files}</ul>` : ""}
       <pre>${linkify(data.body || "")}</pre>
     `;
     $("detail").classList.remove("hidden");
@@ -554,6 +684,7 @@ async function openFolder() {
     await loadRepos();
     if (data.repo && data.repo.id) {
       state.repoId = data.repo.id;
+      state.filterRev = "";
       $("repoSelect").value = state.repoId;
     }
     await refreshView(true);
@@ -575,6 +706,7 @@ async function findRepos() {
     await loadRepos();
     if (data.repo && data.repo.id) {
       state.repoId = data.repo.id;
+      state.filterRev = "";
       $("repoSelect").value = state.repoId;
     }
     await refreshView(true);
@@ -685,6 +817,7 @@ async function openGithubLocal(id) {
       body: JSON.stringify({ id }),
     });
     state.repoId = id;
+    state.filterRev = "";
     $("repoSelect").value = state.repoId;
     await refreshView(true);
     await refreshGithub(true);
@@ -767,6 +900,7 @@ async function cloneGithub(nwo, btn) {
     await loadRepos();
     if (data.repo && data.repo.id) {
       state.repoId = data.repo.id;
+      state.filterRev = "";
       $("repoSelect").value = state.repoId;
     }
     await refreshGithub(true);
@@ -814,11 +948,39 @@ async function githubFetch() {
   }
 }
 
-$("openBtn").addEventListener("click", openFolder);
-$("scanBtn").addEventListener("click", findRepos);
+function closeMoreMenu() {
+  const menu = $("moreMenu");
+  const btn = $("menuBtn");
+  if (menu) menu.classList.add("hidden");
+  if (btn) btn.setAttribute("aria-expanded", "false");
+}
+
+function toggleMoreMenu() {
+  const menu = $("moreMenu");
+  if (!menu) return;
+  const open = menu.classList.contains("hidden");
+  menu.classList.toggle("hidden", !open);
+  $("menuBtn").setAttribute("aria-expanded", open ? "true" : "false");
+}
+
+$("openBtn").addEventListener("click", () => {
+  closeMoreMenu();
+  openFolder();
+});
+$("scanBtn").addEventListener("click", () => {
+  closeMoreMenu();
+  findRepos();
+});
 $("emptyOpenBtn").addEventListener("click", openFolder);
 $("emptyScanBtn").addEventListener("click", findRepos);
-$("ghBtn").addEventListener("click", openGithubPanel);
+$("ghBtn").addEventListener("click", () => {
+  closeMoreMenu();
+  openGithubPanel();
+});
+$("menuBtn").addEventListener("click", (ev) => {
+  ev.stopPropagation();
+  toggleMoreMenu();
+});
 $("emptyGhBtn").addEventListener("click", () => {
   openGithubPanel();
   githubLogin();
@@ -848,6 +1010,7 @@ $("repoSelect").addEventListener("change", async (ev) => {
       body: JSON.stringify({ id }),
     });
     state.repoId = id;
+    state.filterRev = "";
     await refreshView(true);
   } catch (err) {
     showError(String(err.message || err));
@@ -857,6 +1020,7 @@ $("repoSelect").addEventListener("change", async (ev) => {
 $("refSearch").addEventListener("focus", showRefResults);
 $("refSearch").addEventListener("input", () => {
   state.refActive = 0;
+  scheduleCommitSearch($("refSearch").value);
   renderRefResults();
 });
 $("refSearch").addEventListener("keydown", (ev) => {
@@ -873,21 +1037,35 @@ $("refSearch").addEventListener("keydown", (ev) => {
     renderRefResults();
   } else if (ev.key === "Enter") {
     ev.preventDefault();
-    if (hits[state.refActive]) jumpToRef(hits[state.refActive]);
+    const hit = hits[state.refActive];
+    if (!hit) return;
+    if (hit.type === "commit") {
+      hideRefResults();
+      jumpToHash(hit.commit.hash);
+    } else if (hit.ref) {
+      jumpToRef(hit.ref);
+    }
   } else if (ev.key === "Escape") {
     hideRefResults();
+    closeMoreMenu();
     $("refSearch").blur();
   }
 });
 document.addEventListener("mousedown", (ev) => {
   const wrap = document.querySelector(".ref-wrap");
   if (wrap && !wrap.contains(ev.target)) hideRefResults();
+  const menu = document.querySelector(".menu-wrap");
+  if (menu && !menu.contains(ev.target)) closeMoreMenu();
 });
 
 document.addEventListener("keydown", (ev) => {
   if (ev.key === "Escape") {
     if (!$("refResults").classList.contains("hidden")) {
       hideRefResults();
+      return;
+    }
+    if (!$("moreMenu").classList.contains("hidden")) {
+      closeMoreMenu();
       return;
     }
     hideDetail();

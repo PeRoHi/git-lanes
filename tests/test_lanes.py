@@ -103,7 +103,15 @@ class FixtureGitTest(unittest.TestCase):
         return out.stdout.strip()
 
     def test_real_linear_merge_squash_uncommitted_and_invalid(self):
-        from git_lanes.gitio import GitError, list_refs, load_commit, load_graph, toplevel
+        from git_lanes.gitio import (
+            GitError,
+            list_changed_files,
+            list_refs,
+            load_commit,
+            load_graph,
+            search_commits,
+            toplevel,
+        )
 
         import tempfile
 
@@ -146,6 +154,18 @@ class FixtureGitTest(unittest.TestCase):
             self.assertEqual(feat["kind"], "local")
             self.assertTrue(feat["hash"])
             self.assertIn("feat", feat["subject"])
+            feat_only = load_graph(merged, 0, 300, rev="feat")
+            feat_subjects = [c["subject"] for c in feat_only["commits"]]
+            self.assertIn("feat", feat_subjects)
+            self.assertTrue(
+                all("merge feat" not in c["subject"] for c in feat_only["commits"])
+            )
+            hits = search_commits(merged, "merge feat")
+            self.assertTrue(any("merge" in (h.get("subject") or "") for h in hits))
+            merge_files = list_changed_files(merged, merge_c["hash"])
+            self.assertTrue(merge_files)
+            with self.assertRaises(GitError):
+                load_graph(merged, 0, 10, rev="no-such-branch")
 
             squashed = root / "squashed"
             self._init(squashed)
@@ -178,6 +198,12 @@ class FixtureGitTest(unittest.TestCase):
             self.assertTrue(g["commits"][0]["uncommitted"])
             detail = load_commit(dirty, "UNCOMMITTED")
             self.assertIn("wip.txt", detail["body"])
+            self.assertTrue(
+                any(f.get("path") == "wip.txt" for f in detail.get("files") or [])
+            )
+            self._git(dirty, ["stash", "push", "-u", "-m", "park"])
+            stashed = load_graph(dirty, 0, 300)
+            self.assertTrue(any(c.get("stash") for c in stashed["commits"]))
 
             bogus = root / "notgit"
             bogus.mkdir()

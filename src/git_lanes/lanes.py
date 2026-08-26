@@ -13,6 +13,7 @@ class Commit:
     body: str = ""
     refs: list[str] = field(default_factory=list)
     uncommitted: bool = False
+    stash: bool = False
     lane: int = 0
     edges: list[dict] = field(default_factory=list)
     through: list[int] = field(default_factory=list)
@@ -27,6 +28,7 @@ class Commit:
             "subject": self.subject,
             "refs": self.refs,
             "uncommitted": self.uncommitted,
+            "stash": self.stash,
             "lane": self.lane,
             "edges": self.edges,
             "through": self.through,

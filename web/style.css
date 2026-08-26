@@ -28,36 +28,148 @@ html, body {
   overflow: hidden;
 }
 
+.chrome {
+  flex-shrink: 0;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+}
+
 .bar {
   display: flex;
   align-items: center;
+  flex-wrap: nowrap;
   gap: 10px;
   padding: 8px 12px;
-  background: var(--bg2);
-  border-bottom: 1px solid var(--border);
+}
+
+.bar-main {
+  min-height: 40px;
+  overflow: hidden;
+}
+
+.bar-main > .brand,
+.bar-main > button,
+.bar-main > .menu-wrap {
   flex-shrink: 0;
+}
+
+.bar-sub {
+  padding-top: 0;
+  padding-bottom: 8px;
+  gap: 8px;
 }
 
 .brand {
   font-weight: 700;
   letter-spacing: 0.02em;
+  flex-shrink: 0;
 }
 
-.grow { flex: 1; }
+.grow { flex: 1 1 auto; min-width: 8px; }
 
 .field {
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
 }
 
 .field span, .muted { color: var(--muted); }
 
-#repoSelect { max-width: 220px; }
+#repoSelect { max-width: 180px; }
 
-.ref-search { position: relative; z-index: 5; }
-.ref-wrap { position: relative; }
-#refSearch { width: 220px; }
+.ref-search {
+  position: relative;
+  z-index: 5;
+  flex: 1 1 200px;
+  min-width: 140px;
+  max-width: 420px;
+}
+.ref-wrap { position: relative; flex: 1; min-width: 0; }
+#refSearch { width: 100%; min-width: 0; }
+
+.head-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 46%;
+}
+#headName {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+
+.chip {
+  flex-shrink: 1;
+  min-width: 0;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-radius: 999px;
+  padding: 2px 10px;
+}
+
+.chip.active {
+  background: var(--selected);
+  border-color: #5a8ec4;
+}
+
+.icon-btn {
+  width: 32px;
+  height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hamburger {
+  display: block;
+  width: 14px;
+  height: 2px;
+  background: currentColor;
+  box-shadow: 0 -5px 0 currentColor, 0 5px 0 currentColor;
+}
+
+.menu-wrap { position: relative; z-index: 6; }
+
+.more-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  min-width: 180px;
+  background: #141414;
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  padding: 4px 0;
+}
+
+.more-menu button {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  text-align: left;
+  width: 100%;
+}
+
+.more-menu button:hover {
+  background: var(--hover);
+  border-color: transparent;
+}
 
 .ref-results {
   position: absolute;
@@ -71,7 +183,7 @@ html, body {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
 }
 
-button.ref-hit {
+.ref-hit {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -89,8 +201,8 @@ button.ref-hit {
   cursor: pointer;
 }
 
-button.ref-hit:hover,
-button.ref-hit.active {
+.ref-hit:hover,
+.ref-hit.active {
   background: var(--selected);
 }
 
@@ -102,7 +214,13 @@ button.ref-hit.active {
 }
 
 .ref-hit .name { flex: 1; font-weight: 600; }
-.ref-hit .meta { color: var(--muted); }
+.ref-hit .meta { color: var(--muted); flex-shrink: 0; }
+.ref-hit .only {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 1px 8px;
+  font-size: 11px;
+}
 .ref-hit .subject {
   color: var(--muted);
   white-space: nowrap;
@@ -322,6 +440,20 @@ button:hover, select:hover { border-color: #888; }
 .pill.remote { color: #111; background: var(--remote); border-color: var(--remote); }
 .pill.branch { color: #111; background: var(--branch); border-color: var(--branch); }
 .pill.uncommitted { color: #111; background: var(--uncommitted); border-color: var(--uncommitted); }
+.pill.stash { color: #111; background: #7ad0c0; border-color: #7ad0c0; }
+.pill.behind { color: #111; background: #e0a35c; border-color: #e0a35c; flex-shrink: 0; }
+
+.file-list {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font: 12px/1.45 Consolas, "Cascadia Mono", monospace;
+}
+.file-list code {
+  display: inline-block;
+  min-width: 2.2em;
+  margin-right: 8px;
+  color: var(--muted);
+}
 
 .more-wrap { padding: 8px; text-align: center; flex-shrink: 0; }
 

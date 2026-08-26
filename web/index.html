@@ -4,29 +4,45 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Git Lanes</title>
-  <link rel="stylesheet" href="/style.css?v=12">
+  <link rel="stylesheet" href="/style.css?v=13">
 </head>
 <body>
-  <header class="bar">
-    <div class="brand">Git Lanes</div>
-    <label class="field">
-      <span>Repo</span>
-      <select id="repoSelect"></select>
-    </label>
-    <label class="field ref-search">
-      <span>Branch</span>
-      <div class="ref-wrap">
-        <input id="refSearch" type="search" placeholder="Find branch (Ctrl+F)" autocomplete="off" spellcheck="false">
-        <div id="refResults" class="ref-results hidden" role="listbox"></div>
+  <header class="chrome">
+    <div class="bar bar-main">
+      <div class="brand">Git Lanes</div>
+      <label class="field">
+        <span>Repo</span>
+        <select id="repoSelect"></select>
+      </label>
+      <label class="field ref-search">
+        <span>Find</span>
+        <div class="ref-wrap">
+          <input id="refSearch" type="search" placeholder="Branch, subject, hash (Ctrl+F)" autocomplete="off" spellcheck="false">
+          <div id="refResults" class="ref-results hidden" role="listbox"></div>
+        </div>
+      </label>
+      <span class="grow"></span>
+      <button type="button" id="refreshBtn">Refresh</button>
+      <div class="menu-wrap">
+        <button type="button" id="menuBtn" class="icon-btn" aria-label="More" aria-expanded="false" aria-haspopup="true" title="More">
+          <span class="hamburger" aria-hidden="true"></span>
+        </button>
+        <div id="moreMenu" class="more-menu hidden" role="menu">
+          <button type="button" id="scanBtn" role="menuitem">Find my repos</button>
+          <button type="button" id="openBtn" role="menuitem">Open folder</button>
+          <button type="button" id="ghBtn" role="menuitem">GitHub</button>
+        </div>
       </div>
-    </label>
-    <button type="button" id="scanBtn">Find my repos</button>
-    <button type="button" id="openBtn">Open folder</button>
-    <button type="button" id="ghBtn">GitHub</button>
-    <span class="grow"></span>
-    <span id="headLabel" class="muted"></span>
-    <button type="button" id="refreshBtn">Refresh</button>
-    <button type="button" id="quitBtn">Quit</button>
+      <button type="button" id="quitBtn">Quit</button>
+    </div>
+    <div class="bar bar-sub">
+      <div id="filterChips" class="chips"></div>
+      <span class="grow"></span>
+      <span id="headLabel" class="head-label">
+        <span id="headName" class="muted"></span>
+        <span id="headTrack" class="pill behind hidden"></span>
+      </span>
+    </div>
   </header>
 
   <section id="ghPanel" class="gh-panel hidden">
@@ -81,6 +97,6 @@
     <div id="detailBody"></div>
   </aside>
 
-  <script src="/app.js?v=12"></script>
+  <script src="/app.js?v=13"></script>
 </body>
 </html>
