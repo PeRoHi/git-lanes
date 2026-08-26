@@ -493,6 +493,10 @@ def load_graph(
             (max(c.through) + 1) if c.through else 1,
             (max(c.joins) + 1) if c.joins else 1,
         )
+        for e in c.edges:
+            lane_count = max(
+                lane_count, int(e.get("from_lane", 0)) + 1, int(e.get("to_lane", 0)) + 1
+            )
     return {
         "head": head_name or head_hash[:8],
         "head_hash": head_hash,

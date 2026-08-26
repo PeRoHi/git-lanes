@@ -372,7 +372,7 @@ button:hover, select:hover { border-color: #888; }
 .rows-inner {
   position: relative;
   isolation: isolate;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .graph-overlay {

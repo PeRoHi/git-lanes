@@ -142,7 +142,6 @@ function drawGraph(commits, laneCount) {
     const y2 = rowMid(i + 1);
     const joinSet = new Set(curr.joins || []);
     const drawnFrom = new Set();
-    const takenDest = new Set();
 
     for (const e of prev.edges || []) {
       const from = e.from_lane;
@@ -164,7 +163,6 @@ function drawGraph(commits, laneCount) {
         addVert(from, y1, y2);
       } else {
         strokePipe(laneX(from), y1, laneX(to), y2, stroke, "round");
-        takenDest.add(to);
       }
       drawnFrom.add(from);
     }
@@ -174,7 +172,7 @@ function drawGraph(commits, laneCount) {
       drawnFrom.add(j);
     }
     for (const lane of prev.through || []) {
-      if (drawnFrom.has(lane) || takenDest.has(lane) || joinSet.has(lane)) {
+      if (drawnFrom.has(lane) || joinSet.has(lane)) {
         continue;
       }
       addVert(lane, y1, y2);
@@ -183,7 +181,7 @@ function drawGraph(commits, laneCount) {
 
   for (const [lane, runs] of verts) {
     for (const [y1, y2] of mergeRuns(runs)) {
-      strokePipe(laneX(lane), y1, laneX(lane), y2, color(lane), "butt");
+      strokePipe(laneX(lane), y1, laneX(lane), y2, color(lane), "round");
     }
   }
 
