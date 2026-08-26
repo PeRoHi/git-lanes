@@ -977,6 +977,7 @@ $("ghBtn").addEventListener("click", () => {
   closeMoreMenu();
   openGithubPanel();
 });
+$("menuBtn").addEventListener("mousedown", (ev) => ev.stopPropagation());
 $("menuBtn").addEventListener("click", (ev) => {
   ev.stopPropagation();
   toggleMoreMenu();
