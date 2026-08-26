@@ -292,7 +292,7 @@ GitHub を使うときは同じ PC に **GitHub CLI (`gh`)** が入っている�
 
 `py -3w` は環境によってはスクリプトを起動しないので使わない。
 
-Git が PATH に無くても `Program Files\Git\cmd\git.exe` などを探す。Edge も Program Files / LOCALAPPDATA / PATH を見る。デスクトップショートカットが無ければ初回起動で作る。
+Git が PATH に無くても `Program Files\Git\cmd\git.exe` などを探す。Edge も Program Files / LOCALAPPDATA / PATH を見る。デスクトップショートカットが無ければ初回起動で作る。アイコンは `web/favicon.ico`（起動のたびにショートカットへ載せる）。 `--app=` 窓はページの favicon を使う。
 
 新しい PC:
 
@@ -457,4 +457,4 @@ Phase 1 の受け入れは「テスト緑」+ 実機で `life` か本リポの `
 | 2026-08-23 | ログインは Sign out までこの PC に残す。一覧は行全体クリック | ウィンドウを閉じても再ログインしない。token は gh ストア、ユーザー名だけ state.json | 可逆 |
 | 2026-08-25 | ログイン済みなら起動・切替・Refresh で fetch | クラウドの最新 remote 枝が見えない。checkout はしない | 可逆 |
 | 2026-08-26 | ブランチ検索は先端ジャンプ。グラフ絞り込みは後 | Grok 枝の最新位置を探す。checkout はしない | 可逆 |
-| 2026-08-26 | ヘッダは 2 行 + ☰。Find は枝・件名・ハッシュ。Only でその枝だけ。詳細にファイル一覧。stash 行 | 1 行だと折り返す。稀な操作はメニューへ | 可逆 |
+| 2026-08-26 | アプリアイコンは `web/favicon.ico` / `web/icon.png`。ショートカットと `--app=` 窓に載せる | レーン図のマークを入口から見せる | 可逆 |

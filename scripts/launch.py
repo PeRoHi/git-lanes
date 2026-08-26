@@ -156,6 +156,13 @@ def clear_profile_cache(profile: Path) -> None:
         d = profile / name
         if d.is_dir():
             shutil.rmtree(d, ignore_errors=True)
+    for name in ("Favicons", "Favicons-journal"):
+        p = profile / name
+        try:
+            if p.is_file():
+                p.unlink()
+        except OSError:
+            pass
 
 
 PROFILE_MARKER = "git-lanes\\edge-profile"
@@ -255,10 +262,6 @@ def ensure_desktop_shortcut() -> None:
     script = ROOT / "scripts" / "create-shortcut.ps1"
     if not script.is_file():
         return
-    homes = [Path.home() / "Desktop", Path.home() / "OneDrive" / "Desktop"]
-    for desktop in homes:
-        if (desktop / "Git Lanes.lnk").is_file():
-            return
     subprocess.run(
         [
             "powershell",

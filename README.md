@@ -14,7 +14,7 @@ start.bat
 
 - デバッグ（コンソール表示）: `start-debug.bat`
 - URL: `http://127.0.0.1:17920/`（Edge `--app=`）
-- デスクトップショートカット: 初回起動で無ければ作る。手動なら `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\create-shortcut.ps1`
+- デスクトップショートカット: 初回起動で無ければ作る。アイコンは `web/favicon.ico`。手動なら `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\create-shortcut.ps1`
 
 `start.bat` はマシンの PATH に `pythonw` が無くても、`py -3`・python.org のインストール・pyenv-win から `pythonw.exe` を探す。Git が PATH に無くても Git for Windows の定位置を探す。
 
