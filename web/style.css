@@ -53,7 +53,68 @@ html, body {
 
 .field span, .muted { color: var(--muted); }
 
-#repoSelect { max-width: 260px; }
+#repoSelect { max-width: 220px; }
+
+.ref-search { position: relative; z-index: 5; }
+.ref-wrap { position: relative; }
+#refSearch { width: 220px; }
+
+.ref-results {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 4px);
+  width: min(560px, 70vw);
+  max-height: 360px;
+  overflow: auto;
+  background: #141414;
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+button.ref-hit {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  margin: 0;
+  padding: 8px 10px;
+  border: 0;
+  border-bottom: 1px solid #333;
+  border-radius: 0;
+  background: transparent;
+  color: var(--fg);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+button.ref-hit:hover,
+button.ref-hit.active {
+  background: var(--selected);
+}
+
+.ref-hit .top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.ref-hit .name { flex: 1; font-weight: 600; }
+.ref-hit .meta { color: var(--muted); }
+.ref-hit .subject {
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.ref-empty {
+  padding: 10px 12px;
+  color: var(--muted);
+}
 
 .empty-actions {
   display: flex;

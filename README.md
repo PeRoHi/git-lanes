@@ -38,6 +38,7 @@ GitHub ログインは **レーン図を見るだけなら不要**。GitHub 上�
 | Open folder | 1リポを開く。Git でない親フォルダなら配下のリポをまとめて登録 |
 | GitHub | `gh` でログイン。GitHub 上の自分のリポを一覧し、未 clone なら Add、今のリポは Fetch |
 | Repo ドロップダウン | この PC に実在する登録済みリポを切替 |
+| Branch | 枝 / tag を検索し、先端の位置へジャンプ（Ctrl+F） |
 | 行クリック | 件名 / 本文 / 親 / 参照 |
 | Refresh / Ctrl+R | ログイン済みなら fetch してから再描画。未ログインなら手元の再読込 |
 | Ctrl+H | HEAD へスクロール |

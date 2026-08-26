@@ -103,7 +103,7 @@ class FixtureGitTest(unittest.TestCase):
         return out.stdout.strip()
 
     def test_real_linear_merge_squash_uncommitted_and_invalid(self):
-        from git_lanes.gitio import GitError, load_commit, load_graph, toplevel
+        from git_lanes.gitio import GitError, list_refs, load_commit, load_graph, toplevel
 
         import tempfile
 
@@ -138,6 +138,14 @@ class FixtureGitTest(unittest.TestCase):
             self.assertIn("merge", [e["kind"] for e in merge_c["edges"]])
             lanes = {c["lane"] for c in g["commits"]}
             self.assertGreaterEqual(len(lanes), 2)
+            refs = list_refs(merged)
+            names = {r["name"] for r in refs["refs"]}
+            self.assertIn("main", names)
+            self.assertIn("feat", names)
+            feat = next(r for r in refs["refs"] if r["name"] == "feat")
+            self.assertEqual(feat["kind"], "local")
+            self.assertTrue(feat["hash"])
+            self.assertIn("feat", feat["subject"])
 
             squashed = root / "squashed"
             self._init(squashed)

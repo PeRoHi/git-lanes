@@ -14,7 +14,7 @@ from git_lanes.github import logout as github_logout
 from git_lanes.github import open_device_page
 from git_lanes.github import start_login as github_start_login
 from git_lanes.github import status as github_status
-from git_lanes.gitio import GitError, is_work_tree, load_commit, load_graph
+from git_lanes.gitio import GitError, is_work_tree, list_refs, load_commit, load_graph
 from git_lanes.store import (
     load_state,
     pick_last_or_none,
@@ -192,6 +192,17 @@ def _handle_api(method: str, parsed, body: bytes):
             "path": rec["path"],
             "head": data.get("head") or "",
         }
+        return _json_bytes(data)
+
+    if path == "/api/refs" and method == "GET":
+        rec, repo_path = _repo_from_id((qs.get("repo_id") or [""])[0] or None)
+        if rec is None:
+            return _json_bytes({"need_open": True, "refs": []})
+        if repo_path is None or not is_work_tree(repo_path):
+            raise GitError("not a git repository")
+        data = list_refs(repo_path)
+        data["need_open"] = False
+        data["repo"] = {"id": rec["id"], "name": rec["name"]}
         return _json_bytes(data)
 
     if path == "/api/commit" and method == "GET":

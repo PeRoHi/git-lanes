@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -197,6 +198,96 @@ def _load_refs(path: Path) -> tuple[str, str, dict[str, list[str]]]:
     if head_label not in by_hash[head_hash]:
         by_hash[head_hash].insert(0, head_label)
     return head_hash, head_name, by_hash
+
+
+def _parse_track(raw: str) -> dict:
+    text = str(raw or "").strip()
+    ahead = 0
+    behind = 0
+    m = re.search(r"ahead (\d+)", text)
+    if m:
+        ahead = int(m.group(1))
+    m = re.search(r"behind (\d+)", text)
+    if m:
+        behind = int(m.group(1))
+    return {
+        "ahead": ahead,
+        "behind": behind,
+        "gone": "gone" in text.lower(),
+        "raw": text,
+    }
+
+
+def list_refs(path: Path) -> dict:
+    """Tips of local / remote / tag refs, with optional upstream track."""
+    head_hash, head_name, _labels = _load_refs(path)
+    raw = run_git(
+        path,
+        [
+            "for-each-ref",
+            "--sort=-creatordate",
+            "--format=%(*objectname)%1f%(objectname)%1f%(refname)%1f%(HEAD)%1f%(objecttype)%1f%(creatordate:unix)%1f%(authorname)%1f%(contents:subject)%1f%(upstream:short)%1f%(upstream:track,nobracket)",
+            "refs/heads",
+            "refs/remotes",
+            "refs/tags",
+        ],
+    )
+    refs: list[dict] = []
+    for line in raw.splitlines():
+        if not line.strip():
+            continue
+        bits = line.split("\x1f")
+        if len(bits) < 8:
+            continue
+        peeled = bits[0].strip()
+        obj = bits[1].strip()
+        refname = bits[2]
+        current = bits[3].strip() == "*"
+        kind_raw = bits[4]
+        try:
+            author_at = int((bits[5] or "0").strip() or "0")
+        except ValueError:
+            author_at = 0
+        author = bits[6]
+        subject = bits[7]
+        upstream = bits[8] if len(bits) > 8 else ""
+        track_raw = bits[9] if len(bits) > 9 else ""
+        tip = peeled or obj
+        if not tip or not refname:
+            continue
+        if refname.startswith("refs/heads/"):
+            kind = "local"
+            name = refname[len("refs/heads/") :]
+        elif refname.startswith("refs/remotes/"):
+            kind = "remote"
+            name = refname[len("refs/remotes/") :]
+        elif refname.startswith("refs/tags/"):
+            kind = "tag"
+            name = refname[len("refs/tags/") :]
+        else:
+            kind = kind_raw or "other"
+            name = refname
+        track = _parse_track(track_raw)
+        refs.append(
+            {
+                "name": name,
+                "kind": kind,
+                "hash": tip,
+                "current": current,
+                "author": author,
+                "author_at": author_at,
+                "subject": subject,
+                "upstream": upstream,
+                "ahead": track["ahead"],
+                "behind": track["behind"],
+                "gone": track["gone"],
+            }
+        )
+    return {
+        "head": head_name,
+        "head_hash": head_hash,
+        "refs": refs,
+    }
 
 
 def _has_uncommitted(path: Path) -> bool:

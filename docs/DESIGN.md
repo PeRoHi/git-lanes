@@ -131,6 +131,7 @@ Git Graph と同じ情報密度を目指す。上から下へ新しいコミッ�
 | Branches | All / 個別選択（Phase 1 は All だけでも可。フィルタは Phase 2） |
 | 更新 | ログイン済みなら `git fetch --all` してから再描画。未ログインならローカル再読込 |
 | コミットクリック | 詳細パネル |
+| ブランチ検索 | 参照名で絞り、先端の件名・日付・ハッシュを出す。Enter / クリックでその行へ。Ctrl+F |
 | Ctrl+H | HEAD の行へスクロール |
 | Ctrl+R | 更新 |
 | Esc / 終了 | 詳細を閉じる / アプリ終了 |
@@ -203,6 +204,7 @@ MVP で使うコマンドの種類:
 | `GET /api/repos` | 登録リポ一覧 + last-opened |
 | `POST /api/repos/open` | フォルダを登録して対象にする |
 | `GET /api/graph?repo_id=&offset=&limit=` | レーン付きコミット配列 |
+| `GET /api/refs?repo_id=` | ローカル / remote / tag の先端（件名・日付・upstream の ahead/behind） |
 | `GET /api/commit?repo_id=&hash=` | 詳細（件名、本文、親、参照） |
 | `POST /api/shutdown` | サーバ停止。ウィンドウ閉じと同じロック |
 
@@ -408,9 +410,9 @@ Phase 1 の受け入れは「テスト緑」+ 実機で `life` か本リポの `
 - [x] 登録リポの切替（last-opened）
 - [x] 既知作業フォルダのスキャンと、どの PC でも起動できるランチャ
 - [x] GitHub CLI ログイン（一覧 / clone / fetch）。push は出さない
-- [ ] Branches フィルタ
+- [ ] Branches フィルタ（グラフをその枝だけに絞る）
 - [x] Load More / 末尾自動ロード
-- [ ] Find（件名 / ハッシュ / 参照）
+- [x] 参照検索と先端ジャンプ（件名 / ハッシュ検索は未）
 - [x] HEAD へスクロール（Ctrl+H）
 
 ### Phase 3 — 詳細の厚み（任意）
@@ -451,3 +453,4 @@ Phase 1 の受け入れは「テスト緑」+ 実機で `life` か本リポの `
 | 2026-08-23 | GitHub は `gh` ログイン任意。グラフはローカルのまま | リモートの自分のリポをこの PC に足す／fetch するため。token は gh 任せ。push UI は Phase 4 | 可逆 |
 | 2026-08-23 | ログインは Sign out までこの PC に残す。一覧は行全体クリック | ウィンドウを閉じても再ログインしない。token は gh ストア、ユーザー名だけ state.json | 可逆 |
 | 2026-08-25 | ログイン済みなら起動・切替・Refresh で fetch | クラウドの最新 remote 枝が見えない。checkout はしない | 可逆 |
+| 2026-08-26 | ブランチ検索は先端ジャンプ。グラフ絞り込みは後 | Grok 枝の最新位置を探す。checkout はしない | 可逆 |

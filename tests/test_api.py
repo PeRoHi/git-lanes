@@ -113,6 +113,15 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(status, 200, body)
         self.assertEqual(body["subject"], "a")
 
+        status, body = self._json(f"/api/refs?repo_id={rid}")
+        self.assertEqual(status, 200, body)
+        names = {r["name"] for r in body["refs"]}
+        self.assertIn("main", names)
+        tip = next(r for r in body["refs"] if r["name"] == "main")
+        self.assertEqual(tip["kind"], "local")
+        self.assertEqual(tip["hash"], chash)
+        self.assertEqual(tip["subject"], "a")
+
         bogus = Path(self.tmp.name) / "nogit"
         bogus.mkdir()
         status, body = self._json("/api/repos/open", {"path": str(bogus)})
