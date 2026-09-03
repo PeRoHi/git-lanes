@@ -46,9 +46,27 @@ class AssignLanesTest(unittest.TestCase):
         self.assertEqual(len(merge.parents), 2)
         feat = commits[1]
         self.assertEqual(feat.lane, 1)
+        self.assertIn("merge", [e["kind"] for e in feat.edges])
+        self.assertEqual(feat.edges[0]["to_lane"], 0)
         base = commits[2]
         self.assertEqual(base.lane, 0)
-        self.assertIn(1, base.joins)
+
+    def test_consecutive_merges_do_not_keep_side_lane(self):
+        # M1 (M2, B), B (M2), M2 (A, C), C (A), A
+        commits = [
+            _c("M1", ["M2", "B"], "merge1"),
+            _c("B", ["M2"], "feat1"),
+            _c("M2", ["A", "C"], "merge2"),
+            _c("C", ["A"], "feat2"),
+            _c("A", [], "base"),
+        ]
+        assign_lanes(commits)
+        self.assertEqual(commits[0].lane, 0)
+        self.assertEqual(commits[1].lane, 1)
+        self.assertNotIn(1, commits[1].through)
+        self.assertEqual(commits[2].lane, 0)
+        self.assertNotIn(1, commits[2].joins)
+        self.assertEqual(commits[3].lane, 1)
 
     def test_squash_has_no_merge_edge(self):
         # S onto A, feature B still reachable

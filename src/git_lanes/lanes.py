@@ -63,26 +63,42 @@ def assign_lanes(commits: list[Commit]) -> None:
 
         edges: list[dict] = []
         if c.parents:
-            next_state[c.lane] = c.parents[0]
-            edges.append(
-                {"from_lane": c.lane, "to_lane": c.lane, "kind": "parent1"}
-            )
-            for p in c.parents[1:]:
-                existing = [i for i, h in enumerate(next_state) if h == p]
-                if existing:
-                    to = existing[0]
-                else:
-                    to = None
-                    for i in found[1:]:
-                        if next_state[i] is None:
-                            to = i
-                            break
-                    if to is None:
-                        to = _alloc(next_state)
-                    next_state[to] = p
+            p0 = c.parents[0]
+            already = [
+                i for i, h in enumerate(next_state) if h == p0 and i != c.lane
+            ]
+            if already and len(c.parents) == 1:
+                # Parent is already on another lane: close this side branch
+                # instead of carrying a duplicate pointer until the parent.
+                next_state[c.lane] = None
                 edges.append(
-                    {"from_lane": c.lane, "to_lane": to, "kind": "merge"}
+                    {
+                        "from_lane": c.lane,
+                        "to_lane": already[0],
+                        "kind": "merge",
+                    }
                 )
+            else:
+                next_state[c.lane] = p0
+                edges.append(
+                    {"from_lane": c.lane, "to_lane": c.lane, "kind": "parent1"}
+                )
+                for p in c.parents[1:]:
+                    existing = [i for i, h in enumerate(next_state) if h == p]
+                    if existing:
+                        to = existing[0]
+                    else:
+                        to = None
+                        for i in found[1:]:
+                            if next_state[i] is None:
+                                to = i
+                                break
+                        if to is None:
+                            to = _alloc(next_state)
+                        next_state[to] = p
+                    edges.append(
+                        {"from_lane": c.lane, "to_lane": to, "kind": "merge"}
+                    )
         else:
             next_state[c.lane] = None
 

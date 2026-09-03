@@ -146,7 +146,8 @@ function drawGraph(commits, laneCount) {
     const incoming = new Set();
     if (i > 0) {
       const above = commits[i - 1];
-      incoming.add(above.lane);
+      // Occupied lanes below `above`, not `above.lane` itself: a closed side
+      // branch still sits on that index, then the next merge reuses it.
       for (const lane of above.through || []) incoming.add(lane);
     }
 
@@ -182,8 +183,10 @@ function drawGraph(commits, laneCount) {
     for (const lane of prev.through || []) {
       if (drawnFrom.has(lane) || joinSet.has(lane)) continue;
       // New side lane from this merge: the diagonal is enough.
-      // Keep the vertical only if that lane was already live above.
-      if (mergeDest.has(lane) && !incoming.has(lane)) continue;
+      // A join that freed this lane and then reused it is a new branch, not a
+      // continuation of the one above.
+      const absorbed = (prev.joins || []).includes(lane);
+      if (mergeDest.has(lane) && (!incoming.has(lane) || absorbed)) continue;
       addVert(lane, y1, y2);
     }
   }
