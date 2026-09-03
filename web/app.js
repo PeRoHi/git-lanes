@@ -142,6 +142,13 @@ function drawGraph(commits, laneCount) {
     const y2 = rowMid(i + 1);
     const joinSet = new Set(curr.joins || []);
     const drawnFrom = new Set();
+    const mergeDest = new Set();
+    const incoming = new Set();
+    if (i > 0) {
+      const above = commits[i - 1];
+      incoming.add(above.lane);
+      for (const lane of above.through || []) incoming.add(lane);
+    }
 
     for (const e of prev.edges || []) {
       const from = e.from_lane;
@@ -163,6 +170,7 @@ function drawGraph(commits, laneCount) {
         addVert(from, y1, y2);
       } else {
         strokePipe(laneX(from), y1, laneX(to), y2, stroke, "round");
+        mergeDest.add(to);
       }
       drawnFrom.add(from);
     }
@@ -172,9 +180,10 @@ function drawGraph(commits, laneCount) {
       drawnFrom.add(j);
     }
     for (const lane of prev.through || []) {
-      if (drawnFrom.has(lane) || joinSet.has(lane)) {
-        continue;
-      }
+      if (drawnFrom.has(lane) || joinSet.has(lane)) continue;
+      // New side lane from this merge: the diagonal is enough.
+      // Keep the vertical only if that lane was already live above.
+      if (mergeDest.has(lane) && !incoming.has(lane)) continue;
       addVert(lane, y1, y2);
     }
   }
