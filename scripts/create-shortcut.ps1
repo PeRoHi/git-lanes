@@ -1,12 +1,21 @@
 $ErrorActionPreference = "Stop"
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $root = Split-Path -Parent $here
-$ico = Join-Path $root "web\favicon.ico"
+$webIco = Join-Path $root "web\favicon.ico"
+$repoIco = Join-Path $root "Git Lanes.ico"
+if (Test-Path $webIco) {
+  Copy-Item -LiteralPath $webIco -Destination $repoIco -Force
+}
+$ico = $repoIco
+if (-not (Test-Path $ico)) {
+  $ico = $webIco
+}
 $desktop = [Environment]::GetFolderPath("Desktop")
 $paths = @()
+$paths += (Join-Path $root "Git Lanes.lnk")
 $paths += (Join-Path $desktop "Git Lanes.lnk")
 $oneDrive = Join-Path $env:USERPROFILE "OneDrive\Desktop\Git Lanes.lnk"
-if ((Test-Path $oneDrive) -and ($oneDrive -ne $paths[0])) {
+if ((Test-Path $oneDrive) -and ($oneDrive -ne $paths[1])) {
   $paths += $oneDrive
 }
 $shell = New-Object -ComObject WScript.Shell

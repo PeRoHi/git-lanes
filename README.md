@@ -13,6 +13,8 @@ start.bat
 
 ウィンドウを閉じるとサーバも止まる（セッション型）。障害で port が残ったときだけ `stop.bat`。
 
+レーン図アイコンはリポ直下の `Git Lanes.ico`（`web/favicon.ico` と同じ）。`start.bat` を一度走らせると、同じフォルダとデスクトップに `Git Lanes.lnk` ができる。
+
 - デバッグ（コンソール表示）: `start-debug.bat`
 - URL: `http://127.0.0.1:17920/`（Edge `--app=`）
 - デスクトップショートカット: 初回起動で無ければ作る。アイコンは `web/favicon.ico`。手動なら `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\create-shortcut.ps1`
@@ -29,7 +31,7 @@ start.bat
 4. このリポを置く（例: `Desktop\program\git-lanes` でも `Desktop\個人用\program file\git-lanes` でも可）
 5. `start.bat`
 
-GitHub ログインは **レーン図を見るだけなら不要**。GitHub 上のリポをこの PC に clone したり、private の origin を fetch したりするときだけ、画面の **GitHub → Sign in**（GitHub CLI `gh` が必要）。トークンは `gh` のストアに残り、Git Lanes を閉じても Sign out するまで入ったまま。git-lanes のファイルには token を書かない。一覧は行全体をクリックして開く／足す。
+GitHub ログインは **レーン図を見るだけなら不要**。GitHub 上のリポをこの PC に clone したり、private の origin を fetch したりするときだけ、画面の **GitHub → Sign in**（[GitHub CLI (`gh`)](https://cli.github.com/) が必要）。未導入なら Sign in がインストールページを開く。トークンは `gh` のストアに残り、Git Lanes を閉じても Sign out するまで入ったまま。git-lanes のファイルには token を書かない。一覧は行全体をクリックして開く／足す。
 
 ## 操作
 

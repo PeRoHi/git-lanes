@@ -55,6 +55,20 @@ def gh_exe() -> str:
     ]
     if local:
         candidates.append(Path(local) / "Programs" / "GitHub CLI" / "gh.exe")
+        winget = Path(local) / "Microsoft" / "WinGet" / "Packages"
+        if winget.is_dir():
+            candidates.extend(sorted(winget.glob("GitHub.cli*/gh.exe")))
+            candidates.extend(sorted(winget.glob("GitHub.cli*/*/gh.exe")))
+    home = Path.home()
+    candidates.extend(
+        [
+            home / "scoop" / "apps" / "gh" / "current" / "gh.exe",
+            Path(os.environ.get("ProgramData", r"C:\ProgramData"))
+            / "chocolatey"
+            / "bin"
+            / "gh.exe",
+        ]
+    )
     for path in candidates:
         if path.is_file():
             _GH_EXE = str(path)
@@ -172,12 +186,28 @@ def _consume_login(proc: subprocess.Popen) -> None:
             _login["error"] = str(exc)
 
 
+def _press_enter(proc: subprocess.Popen) -> None:
+    # gh prints the device code then waits for Enter before it keeps polling.
+    if proc.stdin is None:
+        return
+    try:
+        proc.stdin.write("\n")
+        proc.stdin.flush()
+    except Exception:
+        log.exception("gh login enter")
+
+
 def open_device_page() -> dict:
     with _login_lock:
         uri = _login["verification_uri"] or DEVICE_URL
         code = _login["user_code"]
     _open_system_browser(uri)
     return {"ok": True, "verification_uri": uri, "user_code": code}
+
+
+def open_install_page() -> dict:
+    _open_system_browser(INSTALL_URL)
+    return {"ok": True, "install_url": INSTALL_URL}
 
 
 def normalize_github_name(url: str) -> str:
@@ -303,12 +333,14 @@ def start_login() -> dict:
             uri = DEVICE_URL
 
     if reuse:
+        _press_enter(proc)
         _open_system_browser(uri)
         st = status()
         return {"started": True, "already": False, **st}
 
     env = os.environ.copy()
     env["BROWSER"] = "false"
+    env["GH_BROWSER"] = "false"
     flags = CREATE_NO_WINDOW if os.name == "nt" else 0
     _kill_login()
     proc = subprocess.Popen(
@@ -322,6 +354,8 @@ def start_login() -> dict:
             "https",
             "--web",
             "--skip-ssh-key",
+            "--scopes",
+            "repo,read:org,gist",
         ],
         stdin=subprocess.PIPE,
         stdout=subprocess.DEVNULL,
@@ -350,6 +384,7 @@ def start_login() -> dict:
             alive = _login["proc"] is not None and _login["proc"].poll() is None
             err = _login["error"]
         if code:
+            _press_enter(proc)
             break
         if not alive and not code:
             _kill_login()

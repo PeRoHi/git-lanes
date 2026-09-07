@@ -293,7 +293,7 @@ GitHub を使うときは同じ PC に **GitHub CLI (`gh`)** が入っている�
 
 `py -3w` は環境によってはスクリプトを起動しないので使わない。
 
-Git が PATH に無くても `Program Files\Git\cmd\git.exe` などを探す。Edge も Program Files / LOCALAPPDATA / PATH を見る。デスクトップショートカットが無ければ初回起動で作る。アイコンは `web/favicon.ico`（起動のたびにショートカットへ載せる）。 `--app=` 窓はページの favicon を使う。
+Git が PATH に無くても `Program Files\Git\cmd\git.exe` などを探す。Edge も Program Files / LOCALAPPDATA / PATH を見る。デスクトップショートカットが無ければ初回起動で作る。同じアイコンで **リポ直下の `Git Lanes.lnk`** も書く（配布先の clone フォルダから起動できるように）。アイコンファイルは `Git Lanes.ico`（`web/favicon.ico` と同じレーン図）。`--app=` 窓はページの favicon を使う。
 
 新しい PC:
 
@@ -319,7 +319,7 @@ Git が PATH に無くても `Program Files\Git\cmd\git.exe` などを探す。E
 
 起動・リポ切替・Refresh は、ログイン済みなら fetch してから描く。checkout はしない。グラフに載るのは手元 `.git`（remote-tracking 含む）なので、クラウド側の最新を見るには fetch が要る。
 
-流れ: UI の Sign in → `gh` がワンタイムコードを出し、Git Lanes に大きく表示 → システムのブラウザで `github.com/login/device` を開く。コンソール窓は出さない。トークンは **`gh` の資格情報ストア**に残るので、Git Lanes を閉じても次起動で入ったまま。ユーザー名だけ `state.json` に覚え、Sign out（`gh auth logout`）で消す。Git Lanes のファイルに token は書かない。
+流れ: UI の Sign in → `gh` がワンタイムコードを出し、Git Lanes に大きく表示 → Enter 待ちをこちらで送ってデバイス認証を進める → システムのブラウザで `github.com/login/device` を開く。コンソール窓は出さない。`gh` が無い配布先はインストールページを開く。トークンは **`gh` の資格情報ストア**に残るので、Git Lanes を閉じても次起動で入ったまま。ユーザー名だけ `state.json` に覚え、Sign out（`gh auth logout`）で消す。Git Lanes のファイルに token は書かない。
 
 GitHub 一覧は行全体をクリックして開く／未 clone ならこの PC に足す（右端の小さな Open ボタンだけではない）。
 
@@ -453,7 +453,7 @@ Phase 1 の受け入れは「テスト緑」+ 実機で `life` か本リポの `
 | 2026-08-23 | MVP は閲覧のみ | 見るためだけに git を壊さない | 可逆（Phase 4） |
 | 2026-08-23 | Git Graph ソースは使わない | GPL-3.0。レーン計算は自前 | 固定 |
 | 2026-08-23 | GitHub リモートは `PeRoHi/git-lanes` 予定 | 他の個人ツールと同じ。この PC は `gh` 未ログインのため作成は後回し | 可逆（2026-09-07 に public で作成） |
-| 2026-09-07 | origin は `PeRoHi/git-lanes` を public | ソースを GitHub に載せる。用途は自分のローカルセッションのまま | 可逆 |
+| 2026-09-07 | 配布先の GitHub ログインは gh の Enter 待ちを送る。リポ直下にレーン図アイコンのショートカットを書く | clone して使う人向け。`gh` 未導入はインストールページ | 可逆 |
 | 2026-08-23 | 既知ルートのスキャン + PATH 非依存の起動 | 自分の他リポを足す。t230g / hidek で Desktop 形が違ってもコードに絶対パスを書かない | 可逆 |
 | 2026-08-23 | GitHub は `gh` ログイン任意。グラフはローカルのまま | リモートの自分のリポをこの PC に足す／fetch するため。token は gh 任せ。push UI は Phase 4 | 可逆 |
 | 2026-08-23 | ログインは Sign out までこの PC に残す。一覧は行全体クリック | ウィンドウを閉じても再ログインしない。token は gh ストア、ユーザー名だけ state.json | 可逆 |

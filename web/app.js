@@ -750,11 +750,14 @@ function renderGhStatus(st) {
   const header = $("ghBtn");
   if (!st.gh_ok) {
     label.textContent = "GitHub CLI not found";
-    loginBtn.classList.add("hidden");
+    loginBtn.textContent = "Install GitHub CLI";
+    loginBtn.classList.remove("hidden");
     logoutBtn.classList.add("hidden");
     header.textContent = "GitHub";
     showGhCode("", "");
-    $("ghHint").textContent = "Install gh from " + (st.install_url || "https://cli.github.com/");
+    $("ghHint").textContent =
+      "GitHub sign-in uses GitHub CLI (gh). Install it, then Sign in here. " +
+      (st.install_url || "https://cli.github.com/");
     return;
   }
   if (st.logged_in) {
@@ -769,6 +772,7 @@ function renderGhStatus(st) {
       ". Saved on this PC until Sign out. Click a row to open or add.";
   } else {
     label.textContent = "GitHub: signed out";
+    loginBtn.textContent = "Sign in";
     loginBtn.classList.remove("hidden");
     logoutBtn.classList.add("hidden");
     header.textContent = "GitHub";
@@ -865,6 +869,14 @@ async function openGithubPanel() {
 async function githubLogin() {
   showError("");
   try {
+    const st = await api("/api/github/status");
+    if (!st.gh_ok) {
+      await api("/api/github/install", { method: "POST" });
+      $("ghHint").textContent =
+        "Install GitHub CLI, then come back and Sign in. " +
+        (st.install_url || "https://cli.github.com/");
+      return;
+    }
     const data = await api("/api/github/login", { method: "POST" });
     if (data.already) {
       await refreshGithub(true);

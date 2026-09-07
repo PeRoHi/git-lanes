@@ -40,6 +40,11 @@ class GithubNameTest(unittest.TestCase):
         self.assertEqual(uri, DEVICE_URL)
         self.assertEqual(parse_login_banner(""), ("", ""))
 
+    def test_install_url_is_cli_github(self):
+        from git_lanes.github import INSTALL_URL
+
+        self.assertTrue(INSTALL_URL.startswith("https://cli.github.com"))
+
     def test_status_shape(self):
         from git_lanes.github import status
 
