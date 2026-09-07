@@ -1,8 +1,8 @@
 # Git Lanes — 設計書（v0.1）
 
-最終更新: 2026-08-26  
+最終更新: 2026-09-07  
 ステータス: **Phase 2 まで実装済み**（Phase 3 の 2 コミット比較は未）  
-閲覧者: **自分だけ**（他人配布なし）
+閲覧者: GitHub は **public**（`PeRoHi/git-lanes`）。用途は自分のローカルセッション
 
 ---
 
@@ -46,7 +46,7 @@ IDE を開かずに同じものを見たくて既存手段を当たった。
 | 6 | データ源 | **レーン図はローカル `.git`**（未 push の枝を含む）。GitHub Network は使わない。任意で **GitHub CLI (`gh`) ログイン**し、自分の GitHub リポの一覧・clone・`fetch` だけ足す |
 | 7 | 書き込み | グラフ操作は **閲覧のみ**（checkout / merge / rebase / push は出さない）。GitHub からの **clone / fetch** はログイン後に限って可 |
 | 8 | 対象機 | Windows。当面 localhost のみ（スマホ / Tailscale は非目標） |
-| 9 | 閲覧者 | 自分だけ |
+| 9 | 閲覧者 | GitHub は public。用途は自分の PC |
 
 ---
 
@@ -323,7 +323,7 @@ Git が PATH に無くても `Program Files\Git\cmd\git.exe` などを探す。E
 
 GitHub 一覧は行全体をクリックして開く／未 clone ならこの PC に足す（右端の小さな Open ボタンだけではない）。
 
-このツール自体を `PeRoHi/git-lanes` に載せる **push は UI に出さない**（Phase 4）。ログイン後に手元で `gh repo create` する。
+このツール自体を `PeRoHi/git-lanes` に載せる **push は UI に出さない**（Phase 4）。origin の作成と push は手元の `gh` / git で行う。
 
 ---
 
@@ -452,7 +452,8 @@ Phase 1 の受け入れは「テスト緑」+ 実機で `life` か本リポの `
 | 2026-08-23 | セッション型ローカル Web | Image Triage と同型。IDE 不要 | 可逆 |
 | 2026-08-23 | MVP は閲覧のみ | 見るためだけに git を壊さない | 可逆（Phase 4） |
 | 2026-08-23 | Git Graph ソースは使わない | GPL-3.0。レーン計算は自前 | 固定 |
-| 2026-08-23 | GitHub リモートは `PeRoHi/git-lanes` 予定 | 他の個人ツールと同じ。この PC は `gh` 未ログインのため作成は後回し | 可逆 |
+| 2026-08-23 | GitHub リモートは `PeRoHi/git-lanes` 予定 | 他の個人ツールと同じ。この PC は `gh` 未ログインのため作成は後回し | 可逆（2026-09-07 に public で作成） |
+| 2026-09-07 | origin は `PeRoHi/git-lanes` を public | ソースを GitHub に載せる。用途は自分のローカルセッションのまま | 可逆 |
 | 2026-08-23 | 既知ルートのスキャン + PATH 非依存の起動 | 自分の他リポを足す。t230g / hidek で Desktop 形が違ってもコードに絶対パスを書かない | 可逆 |
 | 2026-08-23 | GitHub は `gh` ログイン任意。グラフはローカルのまま | リモートの自分のリポをこの PC に足す／fetch するため。token は gh 任せ。push UI は Phase 4 | 可逆 |
 | 2026-08-23 | ログインは Sign out までこの PC に残す。一覧は行全体クリック | ウィンドウを閉じても再ログインしない。token は gh ストア、ユーザー名だけ state.json | 可逆 |

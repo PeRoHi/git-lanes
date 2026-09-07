@@ -2,6 +2,7 @@
 
 IDE を開かずに、ローカル Git の枝の合流を見る専用ビューア。
 
+GitHub: https://github.com/PeRoHi/git-lanes  
 設計の正: [`docs/DESIGN.md`](docs/DESIGN.md)
 
 ## 起動（Windows）

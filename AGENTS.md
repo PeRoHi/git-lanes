@@ -4,7 +4,7 @@
 
 ## このリポ
 
-- 個人用。他人配布なし
+- GitHub は public（`PeRoHi/git-lanes`）。用途は自分のローカルセッション
 - **セッション型**ローカル Web（ウィンドウ閉じ = サーバ停止）
 - MVP は Git の **閲覧のみ**（clone / fetch は GitHub ログイン後の任意）
 - `life/universal-development-prompts-v1.md` をこの Git にコピーしない
