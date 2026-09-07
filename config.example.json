@@ -1,9 +1,4 @@
 {
-  "repos": [
-    {
-      "id": "example",
-      "name": "example",
-      "path": "C:/path/to/your/repo"
-    }
-  ]
+  "repos": [],
+  "scan_roots": []
 }

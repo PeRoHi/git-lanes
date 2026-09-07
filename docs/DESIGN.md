@@ -1,8 +1,8 @@
 # Git Lanes — 設計書（v0.1）
 
-最終更新: 2026-08-23  
-ステータス: **Phase 0 設計合意待ち**（実装コードはまだ無い）  
-閲覧者: **自分だけ**（他人配布なし）
+最終更新: 2026-09-07  
+ステータス: **Phase 2 まで実装済み**（Phase 3 の 2 コミット比較は未）  
+閲覧者: GitHub は **public**（`PeRoHi/git-lanes`）。用途は自分のローカルセッション
 
 ---
 
@@ -43,10 +43,10 @@ IDE を開かずに同じものを見たくて既存手段を当たった。
 | 3 | 寿命 | **セッション型**。起動ショートカットのみ。ウィンドウ閉じ / UI「終了」でサーバ停止 |
 | 4 | UI | ローカル Web + Edge/Chrome `--app=`。gitk / Tk は使わない |
 | 5 | 見た目の目標 | Git Graph の **左レーン + 行ごとの Description / Date / Author / Commit**。gitk の分割ペインには寄せない |
-| 6 | データ源 | **ローカル `.git`**（未 push の枝・stash・作業ツリーを含む）。GitHub API は MVP に使わない |
-| 7 | 書き込み | MVP は **閲覧のみ**（checkout / merge / rebase / push は出さない） |
+| 6 | データ源 | **レーン図はローカル `.git`**（未 push の枝を含む）。GitHub Network は使わない。任意で **GitHub CLI (`gh`) ログイン**し、自分の GitHub リポの一覧・clone・`fetch` だけ足す |
+| 7 | 書き込み | グラフ操作は **閲覧のみ**（checkout / merge / rebase / push は出さない）。GitHub からの **clone / fetch** はログイン後に限って可 |
 | 8 | 対象機 | Windows。当面 localhost のみ（スマホ / Tailscale は非目標） |
-| 9 | 閲覧者 | 自分だけ |
+| 9 | 閲覧者 | GitHub は public。用途は自分の PC |
 
 ---
 
@@ -63,9 +63,11 @@ IDE を開かずに同じものを見たくて既存手段を当たった。
 
 ```
 start.bat
+  → この PC の Python 3.10+ / Git / Edge を探す
   → 固定 port の health OK
+  → 既知の作業フォルダをスキャンして自分のリポを登録
   → Edge --app= 専用ウィンドウ
-  → 最後に開いたリポ（無ければフォルダ選択）
+  → 最後に開いたリポ（この PC に無い path は飛ばす）
   → レーン図（全枝）
   → コミットをクリックすると詳細
   → ウィンドウを閉じる / 「終了」→ サーバ停止
@@ -94,7 +96,8 @@ Git Graph と同じ情報密度を目指す。上から下へ新しいコミッ�
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│ Git Lanes     [リポ v]  [Branches: All v]  [更新]  [終了]         │
+│ Git Lanes  [Repo v]  [Find branch/subject/hash]  [Refresh] [☰] [Quit] │
+│ [All branches] [feat ×]                         HEAD name [N behind] │
 ├────┬──────────────────────────────────┬──────────┬────────┬──────┤
 │Graph│ Description                      │ Date     │ Author │Commit│
 ├────┼──────────────────────────────────┼──────────┼────────┼──────┤
@@ -104,7 +107,7 @@ Git Graph と同じ情報密度を目指す。上から下へ新しいコミッ�
 │ |/ │                                  │          │        │      │
 │ *  │ docs: design v0.1                │ yesterday│ pero   │ e5f6 │
 └────┴──────────────────────────────────┴──────────┴────────┴──────┘
-│ 詳細: 件名 / 本文 / 親ハッシュ / 参照一覧                         │
+│ 詳細: 件名 / 本文 / 親 / 参照 / 変更ファイル（パスのみ）           │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -113,19 +116,23 @@ Git Graph と同じ情報密度を目指す。上から下へ新しいコミッ�
 - 左に **色付きレーン**。merge は線が合流し、squash は合流しない
 - 各行に **参照ラベル**（`HEAD`、ローカル枝、remote 枝、tag）
 - Description / Date / Author / 短縮ハッシュ
-- 未コミット変更があるときは最上段に **Uncommitted** 行
-- 初期は **全枝**（`git log --all` 相当）
-- コミットクリックで下（または右）に詳細
-- リポ切り替え（ドロップダウン + フォルダを開く）
+- 未コミット変更があるときは最上段に **Uncommitted** 行。stash はその下
+- 初期は **全枝**（`git log --all` 相当）。Find の **Only** でその枝の祖先だけ
+- コミットクリックで下（または右）に詳細（変更ファイルのパス。diff 本体は出さない）
+- リポ切り替え（ドロップダウン）
+- **☰** に **Find my repos** / **Open folder** / **GitHub**（常時出さない）
+- **GitHub**（任意。`gh` でログイン → リモート一覧、未 clone をこの PC に足す、今のリポを fetch）
 
 ### 3.2 操作（MVP）
 
 | 操作 | 動作 |
 |---|---|
 | リポ選択 | 登録済み一覧から切替。新規はフォルダ選択 |
-| Branches | All / 個別選択（Phase 1 は All だけでも可。フィルタは Phase 2） |
-| 更新 | 同じリポを再読込（`git fetch` はしない） |
-| コミットクリック | 詳細パネル |
+| Branches | All / 個別選択（Find の Only、または 2 行目のチップ） |
+| 更新 | ログイン済みなら `git fetch --all` してから再描画。未ログインならローカル再読込 |
+| コミットクリック | 詳細パネル（件名・本文・親・参照・変更ファイル） |
+| 検索 | 枝 / tag / 件名 / ハッシュ。先端へジャンプ、または Only でグラフ絞り込み。Ctrl+F |
+| ☰ | Find my repos / Open folder / GitHub |
 | Ctrl+H | HEAD の行へスクロール |
 | Ctrl+R | 更新 |
 | Esc / 終了 | 詳細を閉じる / アプリ終了 |
@@ -165,7 +172,8 @@ MVP で使うコマンドの種類:
 - `git log --all --date-order`（または `--topo-order`。既定は date-order で Git Graph に寄せる）
 - pretty: ハッシュ、親、author、author time、subject、body
 - `git for-each-ref`（heads / remotes / tags）
-- `git stash list`（任意。Phase 1 では無くてもよい）
+- `git stash list`（グラフ先頭付近の stash 行）
+- `git diff --name-status` / `git status --porcelain`（詳細の変更ファイル。diff 本体は出さない）
 
 初期ロード件数: **300**。末尾まで来たら追加 300（Git Graph の Initial Load / Load More と同型）。
 
@@ -177,6 +185,7 @@ MVP で使うコマンドの種類:
 2. 第1親は同じレーンを継承する（直線の履歴）
 3. 第2親以降は別レーンから合流する（merge の斜線）
 4. 子が居なくなったレーンは解放する
+5. 単一親のコミットの第1親が **既に別レーンにいる** ときは、そのレーンへ合流して側枝を閉じる。短い `--no-ff` が連続すると同じレーン番号を再利用するため、親までポインタを残すと合流後も縦線が上に伸びて見える
 
 受け入れ条件（テストで固定する）:
 
@@ -197,8 +206,10 @@ MVP で使うコマンドの種類:
 | `GET /api/health` | ready。起動スクリプトがブラウザを開く前に待つ |
 | `GET /api/repos` | 登録リポ一覧 + last-opened |
 | `POST /api/repos/open` | フォルダを登録して対象にする |
-| `GET /api/graph?repo_id=&offset=&limit=` | レーン付きコミット配列 |
-| `GET /api/commit?repo_id=&hash=` | 詳細（件名、本文、親、参照） |
+| `GET /api/graph?repo_id=&offset=&limit=&ref=` | レーン付きコミット配列。`ref` があればその祖先だけ |
+| `GET /api/refs?repo_id=` | ローカル / remote / tag の先端（件名・日付・upstream の ahead/behind） |
+| `GET /api/search?repo_id=&q=` | 件名 / ハッシュのコミット検索 |
+| `GET /api/commit?repo_id=&hash=` | 詳細（件名、本文、親、参照、変更ファイル） |
 | `POST /api/shutdown` | サーバ停止。ウィンドウ閉じと同じロック |
 
 書き込み系 git は置かない。
@@ -235,15 +246,84 @@ MVP で使うコマンドの種類:
 
 ## 6. 設定と状態
 
-コードにマシン固有の絶対パスを埋め込まない。
+コードにマシン固有の絶対パスを埋め込まない。t230g と hidek で Desktop の形が違っても、ホーム相対の候補と「このクローンの親フォルダ」だけを見る。
 
 | 置き場 | 内容 |
 |---|---|
-| `%APPDATA%/git-lanes/config.json` | 登録リポ一覧（表示名 + path） |
-| `%APPDATA%/git-lanes/state.json` | last-opened、ウィンドウサイズ（任意） |
+| `%APPDATA%/git-lanes/config.json` | 登録リポ一覧（表示名 + path）と `scan_roots` |
+| `%APPDATA%/git-lanes/state.json` | last-opened、最後に確認した GitHub ユーザー名（token は書かない） |
 | リポ内 `config.example.json` | キーの見本だけ。実 path は書かない |
 
-初回起動: 登録が空 → 「フォルダを開く」だけ出す。
+設定は **PC ごと**（APPDATA）。他の PC の path を共有しない。この PC に存在しない登録はドロップダウンに出さない。
+
+### 6.1 リポの見つけ方
+
+ディスク全体は走査しない。
+
+起動時と **Find my repos** は、存在する候補だけを深さ 4 まで見る。
+
+- `%USERPROFILE%\Desktop\program`
+- `%USERPROFILE%\Desktop\個人用\program file`
+- `%USERPROFILE%\Desktop\life`
+- `%USERPROFILE%\Documents\HDLSim`
+- 上記の OneDrive Desktop 版（フォルダがあるときだけ）
+- この `git-lanes` クローン自身と、その親フォルダ
+- ユーザーが Open folder した親フォルダ（`scan_roots`）
+
+`.git` のある作業ツリーだけ登録する。`node_modules` / `.venv` などには入らない。上限は訪問 1200 ディレクトリ・リポ 120・8 秒。
+
+**Open folder** は次のどちらか。
+
+- そのフォルダが Git 作業ツリー → 1件登録して開く
+- そうでない → 配下をスキャンして見つかったリポを全部登録し、親を `scan_roots` に残す
+
+### 6.2 どの PC でも起動する
+
+依存は **Python 3.10+（stdlib のみ）・Git・Edge または Chrome**。venv は不要。GitHub ログインは **任意**（レーン図だけ見るなら不要）。
+
+GitHub を使うときは同じ PC に **GitHub CLI (`gh`)** が入っていること。トークンは `gh` の資格情報ストアに置き、`config.json` には書かない。
+
+`start.bat` は `scripts\find-python.cmd` で `pythonw.exe` を探す。見つからなければ MessageBox。
+
+1. リポの `.venv\Scripts\pythonw.exe`（任意）
+2. `py -3` が返す interpreter と同じフォルダの `pythonw.exe`
+3. `%LocalAppData%\Programs\Python\Python3*\pythonw.exe`
+4. pyenv-win の versions
+5. PATH の `pythonw` / `python`（WindowsApps のストアスタブは使わない）
+
+`py -3w` は環境によってはスクリプトを起動しないので使わない。
+
+Git が PATH に無くても `Program Files\Git\cmd\git.exe` などを探す。Edge も Program Files / LOCALAPPDATA / PATH を見る。デスクトップショートカットが無ければ初回起動で作る。同じアイコンで **リポ直下の `Git Lanes.lnk`** も書く（配布先の clone フォルダから起動できるように）。アイコンファイルは `Git Lanes.ico`（`web/favicon.ico` と同じレーン図）。`--app=` 窓はページの favicon を使う。
+
+新しい PC:
+
+1. Python 3.10+ と Git for Windows を入れる（`py` ランチャーか PATH）
+2. このリポを好きな場所に clone / コピーする（パスはマシンごとに違ってよい）
+3. `start.bat` を実行する
+
+他の PC にまだ clone が無い GitHub リポを足すなら、Git Lanes の **GitHub → Sign in**（`gh auth login --web`）。
+
+### 6.3 初回
+
+登録が空 → 既知ルートをスキャン → まだ空なら Find my repos / Open folder / GitHub sign in。
+
+### 6.4 GitHub ログイン（任意）
+
+グラフの正は今も **ローカル `.git`**。GitHub.com の Network 図は出さない（未 push の枝が無い）。
+
+ログインが要るのは次だけ。
+
+- GitHub 上の自分のリポ一覧
+- この PC に無いリポを `gh repo clone` して登録
+- 今開いているリポの `git fetch --all`（private の origin を含む）
+
+起動・リポ切替・Refresh は、ログイン済みなら fetch してから描く。checkout はしない。グラフに載るのは手元 `.git`（remote-tracking 含む）なので、クラウド側の最新を見るには fetch が要る。
+
+流れ: UI の Sign in → `gh` がワンタイムコードを出し、Git Lanes に大きく表示 → Enter 待ちをこちらで送ってデバイス認証を進める → システムのブラウザで `github.com/login/device` を開く。コンソール窓は出さない。`gh` が無い配布先はインストールページを開く。トークンは **`gh` の資格情報ストア**に残るので、Git Lanes を閉じても次起動で入ったまま。ユーザー名だけ `state.json` に覚え、Sign out（`gh auth logout`）で消す。Git Lanes のファイルに token は書かない。
+
+GitHub 一覧は行全体をクリックして開く／未 clone ならこの PC に足す（右端の小さな Open ボタンだけではない）。
+
+このツール自体を `PeRoHi/git-lanes` に載せる **push は UI に出さない**（Phase 4）。origin の作成と push は手元の `gh` / git で行う。
 
 ---
 
@@ -261,6 +341,7 @@ MVP で使うコマンドの種類:
 
 - `.bat` / `.ps1` は ASCII のみ。日本語リテラル禁止。ユーザー向け説明は `docs/` と README
 - 親 `start.bat` は子起動後すぐ exit
+- Python は `scripts\find-python.cmd` が `pythonw.exe` を探す。PATH に `pythonw` が無くてもよい。`py -3w` は使わない
 - `pythonw` なら logs / MessageBox / `start-debug.bat` の 3 点セット
 - 固定 port **17920** の `/api/health` 成功まで待ってから `--app=`
 - 既存 LISTENING なら先に回収し、空いてから起動
@@ -284,9 +365,9 @@ MVP で使うコマンドの種類:
 ## 8. セキュリティ
 
 - bind は `127.0.0.1` のみ
-- 対象 path は登録リストか、ユーザーが選んだフォルダ。任意 path をクエリで渡して親ディレクトリを辿らせない
+- 対象 path は登録リストか、ユーザーが選んだフォルダか、§6.1 の既知ルート。ディスク全体や任意の親辿りはしない
 - git 引数は配列。ユーザー入力をコマンド列に埋め込まない
-- 秘密情報・`.env` は不要（GitHub token も読まない）
+- 秘密情報は git-lanes のファイルに置かない。GitHub token は **`gh` のストアだけ**。API 応答にも載せない
 - コミット本文の URL は `http:` / `https:` だけリンク化
 
 ---
@@ -302,6 +383,9 @@ MVP で使うコマンドの種類:
 | feature を squash | トランク側に第2親が無い。枝は切れて見える |
 | 未コミット 1 ファイル | 最上段 Uncommitted |
 | `.git` が無いフォルダ | グラフを描かずエラー |
+| 既知ルート配下の Git | スキャンで登録される。`node_modules` 配下は対象外 |
+| この PC に無い登録 path | ドロップダウンに出さず、last-opened も飛ばす |
+| GitHub 未ログイン | `/api/github/status` は `logged_in: false`。clone はしない |
 
 Phase 1 の受け入れは「テスト緑」+ 実機で `life` か本リポの `PeRo` を目視。
 
@@ -314,30 +398,32 @@ Phase 1 の受け入れは「テスト緑」+ 実機で `life` か本リポの `
 - [x] 動機（gitk 却下、IDE 無し、ローカル枝）
 - [x] セッション型 + port **17920**
 - [x] 閲覧のみ、レーン合流の受け入れ条件
-- [ ] この設計への人間 GO（実装開始の合図）
+- [x] この設計への人間 GO（2026-08-23「どんどん進めちゃって」）
 
 ### Phase 1 — MVP
 
-- [ ] `start.bat` / `start-debug.bat` / 障害用 `stop.bat`
-- [ ] health → `--app=` → 閉じたら停止
-- [ ] 1 リポのレーン図（All branches、初期 300）
-- [ ] merge / squash / 直線のユニットテスト
-- [ ] コミット詳細（件名・本文・親・参照）
-- [ ] フォルダを開いて対象リポにする
+- [x] `start.bat` / `start-debug.bat` / 障害用 `stop.bat`
+- [x] health → `--app=` → 閉じたら停止
+- [x] 1 リポのレーン図（All branches、初期 300）
+- [x] merge / squash / 直線のユニットテスト
+- [x] コミット詳細（件名・本文・親・参照）
+- [x] フォルダを開いて対象リポにする
 
 ### Phase 2 — 使い勝手
 
-- [ ] 登録リポの切替（last-opened）
-- [ ] Branches フィルタ
-- [ ] Load More / 末尾自動ロード
-- [ ] Find（件名 / ハッシュ / 参照）
-- [ ] HEAD へスクロール（Ctrl+H）
+- [x] 登録リポの切替（last-opened）
+- [x] 既知作業フォルダのスキャンと、どの PC でも起動できるランチャ
+- [x] GitHub CLI ログイン（一覧 / clone / fetch）。push は出さない
+- [x] Branches フィルタ（グラフをその枝だけに絞る）
+- [x] Load More / 末尾自動ロード
+- [x] 参照検索と先端ジャンプ（件名 / ハッシュ検索を含む）
+- [x] HEAD へスクロール（Ctrl+H）
 
 ### Phase 3 — 詳細の厚み（任意）
 
-- [ ] 変更ファイル一覧（diff 本体は OS の既存ツールか後続）
+- [x] 変更ファイル一覧（diff 本体は OS の既存ツールか後続）
 - [ ] 2 コミット比較
-- [ ] stash 行
+- [x] stash 行
 
 ### Phase 4 — 書き込み（明示 GO が無い限りやらない）
 
@@ -366,4 +452,12 @@ Phase 1 の受け入れは「テスト緑」+ 実機で `life` か本リポの `
 | 2026-08-23 | セッション型ローカル Web | Image Triage と同型。IDE 不要 | 可逆 |
 | 2026-08-23 | MVP は閲覧のみ | 見るためだけに git を壊さない | 可逆（Phase 4） |
 | 2026-08-23 | Git Graph ソースは使わない | GPL-3.0。レーン計算は自前 | 固定 |
-| 2026-08-23 | GitHub リモートは `PeRoHi/git-lanes` 予定 | 他の個人ツールと同じ。この PC は `gh` 未ログインのため作成は後回し | 可逆 |
+| 2026-08-23 | GitHub リモートは `PeRoHi/git-lanes` 予定 | 他の個人ツールと同じ。この PC は `gh` 未ログインのため作成は後回し | 可逆（2026-09-07 に public で作成） |
+| 2026-09-07 | 配布先の GitHub ログインは gh の Enter 待ちを送る。リポ直下にレーン図アイコンのショートカットを書く | clone して使う人向け。`gh` 未導入はインストールページ | 可逆 |
+| 2026-08-23 | 既知ルートのスキャン + PATH 非依存の起動 | 自分の他リポを足す。t230g / hidek で Desktop 形が違ってもコードに絶対パスを書かない | 可逆 |
+| 2026-08-23 | GitHub は `gh` ログイン任意。グラフはローカルのまま | リモートの自分のリポをこの PC に足す／fetch するため。token は gh 任せ。push UI は Phase 4 | 可逆 |
+| 2026-08-23 | ログインは Sign out までこの PC に残す。一覧は行全体クリック | ウィンドウを閉じても再ログインしない。token は gh ストア、ユーザー名だけ state.json | 可逆 |
+| 2026-08-25 | ログイン済みなら起動・切替・Refresh で fetch | クラウドの最新 remote 枝が見えない。checkout はしない | 可逆 |
+| 2026-08-26 | ブランチ検索は先端ジャンプ。グラフ絞り込みは後 | Grok 枝の最新位置を探す。checkout はしない | 可逆 |
+| 2026-08-26 | アプリアイコンは `web/favicon.ico` / `web/icon.png`。ショートカットと `--app=` 窓に載せる | レーン図のマークを入口から見せる | 可逆 |
+| 2026-09-03 | 短い枝の連続では側枝を親コミットまで残さず合流で閉じる | 同じレーン番号の再利用で合流後も縦線が上に伸びて見えた | 可逆 |

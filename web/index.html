@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Git Lanes</title>
+  <link rel="icon" href="/favicon.ico?v=1" sizes="any">
+  <link rel="icon" type="image/png" sizes="256x256" href="/icon.png?v=1">
+  <link rel="apple-touch-icon" href="/icon.png?v=1">
+  <link rel="stylesheet" href="/style.css?v=15">
+</head>
+<body>
+  <header class="chrome">
+    <div class="bar bar-main">
+      <div class="brand">Git Lanes</div>
+      <label class="field">
+        <span>Repo</span>
+        <select id="repoSelect"></select>
+      </label>
+      <label class="field ref-search">
+        <span>Find</span>
+        <div class="ref-wrap">
+          <input id="refSearch" type="search" placeholder="Branch, subject, hash (Ctrl+F)" autocomplete="off" spellcheck="false">
+          <div id="refResults" class="ref-results hidden" role="listbox"></div>
+        </div>
+      </label>
+      <span class="grow"></span>
+      <button type="button" id="refreshBtn">Refresh</button>
+      <div class="menu-wrap">
+        <button type="button" id="menuBtn" class="icon-btn" aria-label="More" aria-expanded="false" aria-haspopup="true" title="More">
+          <span class="hamburger" aria-hidden="true"></span>
+        </button>
+        <div id="moreMenu" class="more-menu hidden" role="menu">
+          <button type="button" id="scanBtn" role="menuitem">Find my repos</button>
+          <button type="button" id="openBtn" role="menuitem">Open folder</button>
+          <button type="button" id="ghBtn" role="menuitem">GitHub</button>
+        </div>
+      </div>
+      <button type="button" id="quitBtn">Quit</button>
+    </div>
+    <div class="bar bar-sub">
+      <div id="filterChips" class="chips"></div>
+      <span class="grow"></span>
+      <span id="headLabel" class="head-label">
+        <span id="headName" class="muted"></span>
+        <span id="headTrack" class="pill behind hidden"></span>
+      </span>
+    </div>
+  </header>
+
+  <section id="ghPanel" class="gh-panel hidden">
+    <div class="gh-toolbar">
+      <span id="ghStatus" class="muted">GitHub: signed out</span>
+      <button type="button" id="ghLoginBtn">Sign in</button>
+      <button type="button" id="ghLogoutBtn" class="hidden">Sign out</button>
+      <button type="button" id="ghFetchBtn">Fetch this repo</button>
+      <span class="grow"></span>
+      <button type="button" id="ghCloseBtn">Close</button>
+    </div>
+    <p id="ghHint" class="muted gh-hint"></p>
+    <div id="ghCodeWrap" class="gh-code-row hidden">
+      <div id="ghCode" class="gh-code"></div>
+      <button type="button" id="ghOpenDeviceBtn">Open GitHub</button>
+    </div>
+    <div id="ghList" class="gh-list"></div>
+  </section>
+
+  <section id="empty" class="empty hidden">
+    <p>No git repo on this PC yet. Scan usual folders, open one, or sign in to GitHub.</p>
+    <div class="empty-actions">
+      <button type="button" id="emptyScanBtn">Find my repos</button>
+      <button type="button" id="emptyOpenBtn">Open folder</button>
+      <button type="button" id="emptyGhBtn">GitHub sign in</button>
+    </div>
+  </section>
+
+  <section id="error" class="error hidden"></section>
+
+  <div id="tableWrap" class="hidden">
+    <div class="cols head-row">
+      <div class="col-graph" id="graphHead">Graph</div>
+      <div class="col-desc">Description</div>
+      <div class="col-date">Date</div>
+      <div class="col-author">Author</div>
+      <div class="col-hash">Commit</div>
+    </div>
+    <div class="rows-body">
+      <div class="rows-inner">
+        <canvas id="graphOverlay" class="graph-overlay" aria-hidden="true"></canvas>
+        <div id="rows" class="rows"></div>
+      </div>
+    </div>
+    <div class="more-wrap">
+      <button type="button" id="moreBtn" class="hidden">Load more</button>
+    </div>
+  </div>
+
+  <aside id="detail" class="detail hidden">
+    <button type="button" class="detail-close" id="detailClose">Close</button>
+    <div id="detailBody"></div>
+  </aside>
+
+  <script src="/app.js?v=18"></script>
+</body>
+</html>
