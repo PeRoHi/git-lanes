@@ -65,12 +65,18 @@ function pillClass(ref) {
 }
 
 function linkify(text) {
-  const esc = (s) =>
-    s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-  return esc(text).replace(
-    /https?:\/\/[^\s<]+/g,
-    (u) => `<a href="${u}" target="_blank" rel="noopener">${u}</a>`
-  );
+  const raw = String(text || "");
+  const re = /https?:\/\/[^\s<>"'\\]+/g;
+  let out = "";
+  let last = 0;
+  let m;
+  while ((m = re.exec(raw))) {
+    out += esc(raw.slice(last, m.index));
+    const u = m[0].replace(/[.,);:]+$/, "");
+    out += `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(u)}</a>`;
+    last = m.index + m[0].length;
+  }
+  return out + esc(raw.slice(last));
 }
 
 function laneX(lane) {

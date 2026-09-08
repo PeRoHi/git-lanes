@@ -97,7 +97,9 @@ def _run_gh(args: list[str], timeout: int = 60, *, hide: bool = True) -> str:
         err = (proc.stderr or proc.stdout or "gh failed").strip()
         if "not logged" in err.lower() or "no github hosts" in err.lower():
             raise GitError("not signed in to GitHub")
-        raise GitError(err)
+        cmd = args[0] if args else "gh"
+        log.info("gh failed rc=%s cmd=%s", proc.returncode, cmd)
+        raise GitError("gh failed")
     return proc.stdout
 
 
@@ -167,7 +169,7 @@ def _consume_login(proc: subprocess.Popen) -> None:
             if rc == 0:
                 _login["error"] = ""
             else:
-                _login["error"] = buf.strip()[-500:] or "GitHub login did not finish"
+                _login["error"] = "GitHub login did not finish"
         if rc == 0:
             try:
                 _run_gh(["auth", "setup-git"])
@@ -183,7 +185,7 @@ def _consume_login(proc: subprocess.Popen) -> None:
     except Exception as exc:
         log.exception("login reader")
         with _login_lock:
-            _login["error"] = str(exc)
+            _login["error"] = "GitHub login did not finish"
 
 
 def _press_enter(proc: subprocess.Popen) -> None:
@@ -245,7 +247,7 @@ def clone_parent() -> Path:
 
 def status() -> dict:
     try:
-        exe = gh_exe()
+        gh_exe()
     except GitError as exc:
         st = {
             "gh_ok": False,
@@ -269,11 +271,12 @@ def status() -> dict:
             "user": login,
             "install_url": INSTALL_URL,
             "error": "",
-            "gh": exe,
         }
     except GitError as exc:
         msg = str(exc)
-        if "gh auth login" in msg.lower() or "not logged" in msg.lower() or "no github hosts" in msg.lower():
+        if msg in {"not signed in to GitHub"}:
+            msg = ""
+        elif msg not in {"gh timed out", "gh failed"}:
             msg = ""
         st = {
             "gh_ok": True,
@@ -281,7 +284,6 @@ def status() -> dict:
             "user": "",
             "install_url": INSTALL_URL,
             "error": msg,
-            "gh": exe,
         }
     except json.JSONDecodeError:
         st = {
@@ -290,7 +292,6 @@ def status() -> dict:
             "user": "",
             "install_url": INSTALL_URL,
             "error": "gh api user returned invalid json",
-            "gh": exe,
         }
     with _login_lock:
         st.update(_login_snapshot())
@@ -364,6 +365,7 @@ def start_login() -> dict:
         encoding="utf-8",
         errors="replace",
         env=env,
+        shell=False,
         creationflags=flags,
     )
     with _login_lock:
@@ -391,10 +393,8 @@ def start_login() -> dict:
             raise GitError(err or "could not start GitHub login")
         time.sleep(0.1)
     if not code:
-        with _login_lock:
-            tail = "".join(_login["lines"])[-300:]
         _kill_login()
-        raise GitError("could not read GitHub login code. " + tail)
+        raise GitError("could not read GitHub login code")
 
     _open_system_browser(uri or DEVICE_URL)
     log.info("github device login code issued")
@@ -477,8 +477,7 @@ def list_remote_repos() -> dict:
             }
         )
     repos.sort(key=lambda r: (r["local"] is None, r["nameWithOwner"].casefold()))
-    dest = str(clone_parent())
-    return {"repos": repos, "clone_parent": dest, **st}
+    return {"repos": repos, **st}
 
 
 def clone_named(name_with_owner: str) -> dict:
@@ -504,5 +503,5 @@ def fetch_named(repo_id: str) -> dict:
     path = resolve_repo(repo_id)
     if path is None:
         raise GitError("unknown repo")
-    out = fetch_all(path)
-    return {"ok": True, "repo_id": repo_id, "output": (out or "").strip()[:500]}
+    fetch_all(path)
+    return {"ok": True, "repo_id": repo_id}

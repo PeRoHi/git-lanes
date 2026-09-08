@@ -29,7 +29,9 @@ class ApiTest(unittest.TestCase):
 
     def tearDown(self):
         self.shutdown_async()
-        time.sleep(0.2)
+        from git_lanes.server import wait_stopped
+
+        wait_stopped()
         self.tmp.cleanup()
 
     def _wait_health(self):

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import logging
 import os
 import re
 import shutil
 import subprocess
 from pathlib import Path
+
+log = logging.getLogger("git_lanes.gitio")
 
 from git_lanes.lanes import Commit, assign_lanes
 
@@ -78,8 +81,9 @@ def run_git(cwd: Path, args: list[str], timeout: int = 30) -> str:
     except subprocess.TimeoutExpired as exc:
         raise GitError("git timed out") from exc
     if proc.returncode != 0:
-        err = (proc.stderr or proc.stdout or "git failed").strip()
-        raise GitError(err)
+        cmd = args[0] if args else "git"
+        log.info("git failed rc=%s cmd=%s", proc.returncode, cmd)
+        raise GitError("git failed")
     return proc.stdout
 
 
@@ -540,7 +544,7 @@ def load_commit(path: Path, chash: str) -> dict:
         "hash": full,
         "parents": [p for p in parts[1].split() if p],
         "author": parts[2],
-        "author_at": int(parts[3] or "0"),
+        "author_at": int(parts[3] or "0") if str(parts[3] or "0").strip().isdigit() else 0,
         "subject": parts[4],
         "body": parts[5].strip("\n"),
         "refs": refs.get(full, []),
