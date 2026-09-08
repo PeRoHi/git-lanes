@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -22,6 +23,13 @@ from git_lanes.gitio import (
     load_graph,
     search_commits,
 )
+from git_lanes.httpguard import (
+    check_request,
+    client_error_message,
+    resolve_web_file,
+)
+
+MAX_BODY = 256 * 1024
 from git_lanes.store import (
     load_state,
     pick_last_or_none,
@@ -193,6 +201,8 @@ def _handle_api(method: str, parsed, body: bytes):
             limit = int((qs.get("limit") or [str(INITIAL_LOAD)])[0])
         except ValueError as exc:
             raise GitError("invalid paging") from exc
+        if offset < 0 or offset > 20_000:
+            raise GitError("invalid paging")
         limit = min(max(limit, 1), LOAD_MORE * 2)
         rev = (qs.get("ref") or [""])[0]
         data = load_graph(repo_path, offset=offset, limit=limit, rev=rev)
@@ -245,6 +255,10 @@ def _handle_api(method: str, parsed, body: bytes):
     return 404, "application/json; charset=utf-8", b'{"error":"not found"}'
 
 
+class LoopbackServer(ThreadingHTTPServer):
+    allow_reuse_address = True
+
+
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -259,21 +273,25 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(payload)
 
+    def _guard(self) -> bool:
+        ok, status, msg = check_request(
+            self.headers, method=self.command, expected_port=PORT
+        )
+        if ok:
+            return True
+        self._send(status, "application/json; charset=utf-8", _json_bytes({"error": msg}, status)[2])
+        return False
+
     def _static(self, rel: str) -> None:
-        if rel in ("", "/"):
-            rel = "/index.html"
-        name = rel.lstrip("/").replace("\\", "/")
-        if ".." in name.split("/"):
-            self._send(403, "text/plain", b"forbidden")
-            return
-        path = (WEB / name).resolve()
-        try:
-            path.relative_to(WEB.resolve())
-        except ValueError:
-            self._send(403, "text/plain", b"forbidden")
-            return
-        if not path.is_file():
-            self._send(404, "text/plain", b"not found")
+        path = resolve_web_file(WEB, rel)
+        if path is None:
+            raw = (rel or "").replace("\\", "/").lower()
+            forbidden = ".." in raw.split("/") or "%2e" in raw
+            self._send(
+                403 if forbidden else 404,
+                "text/plain",
+                b"forbidden" if forbidden else b"not found",
+            )
             return
         suffix = path.suffix.lower()
         types = {
@@ -291,12 +309,16 @@ class Handler(BaseHTTPRequestHandler):
         self._send(200, types.get(suffix, "application/octet-stream"), data)
 
     def do_GET(self) -> None:
+        if not self._guard():
+            return
         parsed = urlparse(self.path)
         if parsed.path.startswith("/api/"):
             try:
                 status, ctype, payload = _handle_api("GET", parsed, b"")
             except GitError as exc:
-                status, ctype, payload = _json_bytes({"error": str(exc)}, 400)
+                status, ctype, payload = _json_bytes(
+                    {"error": client_error_message(exc)}, 400
+                )
             except Exception:
                 log.exception("GET failed")
                 status, ctype, payload = _json_bytes({"error": "internal"}, 500)
@@ -305,13 +327,25 @@ class Handler(BaseHTTPRequestHandler):
         self._static(parsed.path)
 
     def do_POST(self) -> None:
+        if not self._guard():
+            return
         parsed = urlparse(self.path)
-        length = int(self.headers.get("Content-Length") or "0")
+        raw_len = self.headers.get("Content-Length") or "0"
+        try:
+            length = int(raw_len)
+        except ValueError:
+            self._send(400, "application/json; charset=utf-8", b'{"error":"invalid body"}')
+            return
+        if length < 0 or length > MAX_BODY:
+            self._send(400, "application/json; charset=utf-8", b'{"error":"invalid body"}')
+            return
         body = self.rfile.read(length) if length else b""
         try:
             status, ctype, payload = _handle_api("POST", parsed, body)
         except GitError as exc:
-            status, ctype, payload = _json_bytes({"error": str(exc)}, 400)
+            status, ctype, payload = _json_bytes(
+                {"error": client_error_message(exc)}, 400
+            )
         except Exception:
             log.exception("POST failed")
             status, ctype, payload = _json_bytes({"error": "internal"}, 500)
@@ -329,19 +363,33 @@ def shutdown_async() -> None:
         return
 
     def _stop():
+        global _httpd
         try:
             httpd.shutdown()
         except Exception:
             log.exception("shutdown failed")
+        try:
+            httpd.server_close()
+        except Exception:
+            log.exception("server_close failed")
+        if _httpd is httpd:
+            _httpd = None
 
     threading.Thread(target=_stop, name="shutdown", daemon=True).start()
+
+
+def wait_stopped(timeout: float = 5.0) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if _httpd is None:
+            return
+        time.sleep(0.05)
 
 
 def serve_forever() -> ThreadingHTTPServer:
     global _httpd, _shutting_down
     _shutting_down = False
-    httpd = ThreadingHTTPServer((HOST, PORT), Handler)
-    httpd.allow_reuse_address = True
+    httpd = LoopbackServer((HOST, PORT), Handler)
     _httpd = httpd
     log.info("listening on http://%s:%s/", HOST, PORT)
     httpd.serve_forever()
@@ -350,9 +398,16 @@ def serve_forever() -> ThreadingHTTPServer:
 
 def start_background() -> ThreadingHTTPServer:
     global _httpd, _shutting_down
+    wait_stopped(timeout=5.0)
+    if _httpd is not None:
+        try:
+            _httpd.shutdown()
+            _httpd.server_close()
+        except Exception:
+            log.exception("previous server close failed")
+        _httpd = None
     _shutting_down = False
-    httpd = ThreadingHTTPServer((HOST, PORT), Handler)
-    httpd.allow_reuse_address = True
+    httpd = LoopbackServer((HOST, PORT), Handler)
     _httpd = httpd
     t = threading.Thread(target=httpd.serve_forever, name="httpd", daemon=True)
     t.start()

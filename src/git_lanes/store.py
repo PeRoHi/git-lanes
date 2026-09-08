@@ -32,13 +32,55 @@ def _read_json(path: Path, default):
         return default
 
 
+def _is_symlink(path: Path) -> bool:
+    try:
+        return path.is_symlink()
+    except OSError:
+        return True
+
+
 def _write_json(path: Path, data) -> None:
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(
-        json.dumps(data, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
-    tmp.replace(path)
+    payload = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
+    if not payload.strip():
+        raise OSError("refuse empty write")
+    dest = path
+    parent = dest.parent
+    tmp = dest.with_name(dest.name + ".tmp")
+    if _is_symlink(dest) or _is_symlink(parent) or _is_symlink(tmp):
+        raise OSError("refuse symlink write")
+    parent.mkdir(parents=True, exist_ok=True)
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    fd = os.open(str(tmp), flags, 0o644)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fd = -1
+            fh.write(payload)
+            fh.flush()
+            os.fsync(fh.fileno())
+    except Exception:
+        if fd >= 0:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        raise
+    os.replace(str(tmp), str(dest))
+    try:
+        dir_fd = os.open(str(parent), os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(dir_fd)
+    except OSError:
+        pass
+    finally:
+        os.close(dir_fd)
 
 
 def load_config() -> dict:

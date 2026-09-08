@@ -104,7 +104,9 @@ class GithubStatusApiTest(unittest.TestCase):
 
     def tearDown(self):
         self.shutdown_async()
-        self.time.sleep(0.2)
+        from git_lanes.server import wait_stopped
+
+        wait_stopped()
         self.tmp.cleanup()
 
     def test_github_status_endpoint(self):

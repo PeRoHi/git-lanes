@@ -65,6 +65,7 @@ def reclaim_port(port: int) -> None:
             text=True,
             encoding="utf-8",
             errors="replace",
+            shell=False,
             creationflags=0x08000000,
         ).stdout
     except OSError:
@@ -84,6 +85,7 @@ def reclaim_port(port: int) -> None:
         subprocess.run(
             ["taskkill", "/PID", pid, "/F"],
             capture_output=True,
+            shell=False,
             creationflags=0x08000000,
         )
         logging.info("reclaimed pid %s on port %s", pid, port)
@@ -192,6 +194,7 @@ def _profile_pids() -> list[int]:
             text=True,
             encoding="utf-8",
             errors="replace",
+            shell=False,
             creationflags=CREATE_NO_WINDOW,
             timeout=20,
         ).stdout
@@ -212,6 +215,7 @@ def kill_profile_browsers() -> None:
         subprocess.run(
             ["taskkill", "/PID", str(pid), "/F"],
             capture_output=True,
+            shell=False,
             creationflags=CREATE_NO_WINDOW,
         )
         logging.info("killed profile browser pid %s", pid)
@@ -272,6 +276,7 @@ def ensure_desktop_shortcut() -> None:
             str(script),
         ],
         capture_output=True,
+        shell=False,
         creationflags=0x08000000,
         timeout=20,
     )
@@ -306,7 +311,7 @@ def main() -> int:
             "--no-default-browser-check",
         ]
         logging.info("open %s", cmd[:2])
-        proc = subprocess.Popen(cmd)
+        proc = subprocess.Popen(cmd, shell=False)
         wait_app_window(proc)
         shutdown_async()
         time.sleep(0.4)
