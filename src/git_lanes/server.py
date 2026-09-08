@@ -28,8 +28,6 @@ from git_lanes.httpguard import (
     client_error_message,
     resolve_web_file,
 )
-
-MAX_BODY = 256 * 1024
 from git_lanes.store import (
     load_state,
     pick_last_or_none,
@@ -39,6 +37,7 @@ from git_lanes.store import (
 )
 
 log = logging.getLogger("git_lanes.server")
+MAX_BODY = 256 * 1024
 
 ROOT = Path(__file__).resolve().parents[2]
 WEB = ROOT / "web"
