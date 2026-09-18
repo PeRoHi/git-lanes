@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from git_lanes import HOST, PORT
-from git_lanes.gitio import GitError, git_exe
+from git_lanes.gitio import GitError, child_env, git_exe
 from git_lanes.server import shutdown_async, start_background
 
 LOG_DIR = ROOT / "logs"
@@ -55,6 +55,28 @@ def ensure_git() -> None:
     logging.info("git=%s", exe)
 
 
+def netstat_listening_pid(line: str, port: int) -> str | None:
+    """Exact local LISTENING port. ':17920' must not match ':179201'."""
+    if "LISTENING" not in line:
+        return None
+    parts = line.split()
+    if len(parts) < 2:
+        return None
+    local = next((tok for tok in parts if ":" in tok), None)
+    if not local:
+        return None
+    if local.startswith("[") and "]:" in local:
+        port_s = local.rsplit("]:", 1)[-1]
+    else:
+        port_s = local.rsplit(":", 1)[-1]
+    if not port_s.isdigit() or int(port_s) != port:
+        return None
+    pid = parts[-1]
+    if pid.isdigit():
+        return pid
+    return None
+
+
 def reclaim_port(port: int) -> None:
     if os.name != "nt":
         return
@@ -66,26 +88,22 @@ def reclaim_port(port: int) -> None:
             encoding="utf-8",
             errors="replace",
             shell=False,
+            env=child_env(),
             creationflags=0x08000000,
         ).stdout
     except OSError:
         return
     pids = set()
-    needle = f":{port}"
     for line in out.splitlines():
-        if "LISTENING" not in line or needle not in line:
-            continue
-        parts = line.split()
-        if not parts:
-            continue
-        pid = parts[-1]
-        if pid.isdigit() and int(pid) != os.getpid():
+        pid = netstat_listening_pid(line, port)
+        if pid and int(pid) != os.getpid():
             pids.add(pid)
     for pid in pids:
         subprocess.run(
             ["taskkill", "/PID", pid, "/F"],
             capture_output=True,
             shell=False,
+            env=child_env(),
             creationflags=0x08000000,
         )
         logging.info("reclaimed pid %s on port %s", pid, port)
@@ -195,6 +213,7 @@ def _profile_pids() -> list[int]:
             encoding="utf-8",
             errors="replace",
             shell=False,
+            env=child_env(),
             creationflags=CREATE_NO_WINDOW,
             timeout=20,
         ).stdout
@@ -216,6 +235,7 @@ def kill_profile_browsers() -> None:
             ["taskkill", "/PID", str(pid), "/F"],
             capture_output=True,
             shell=False,
+            env=child_env(),
             creationflags=CREATE_NO_WINDOW,
         )
         logging.info("killed profile browser pid %s", pid)
@@ -277,6 +297,7 @@ def ensure_desktop_shortcut() -> None:
         ],
         capture_output=True,
         shell=False,
+        env=child_env(),
         creationflags=0x08000000,
         timeout=20,
     )
@@ -311,7 +332,7 @@ def main() -> int:
             "--no-default-browser-check",
         ]
         logging.info("open %s", cmd[:2])
-        proc = subprocess.Popen(cmd, shell=False)
+        proc = subprocess.Popen(cmd, shell=False, env=child_env())
         wait_app_window(proc)
         shutdown_async()
         time.sleep(0.4)

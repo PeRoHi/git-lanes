@@ -3,9 +3,18 @@ from __future__ import annotations
 import json
 import os
 import re
+import stat
 from pathlib import Path
 
 APP_DIR_NAME = "git-lanes"
+
+
+class StoreError(Exception):
+    pass
+
+
+_config_load_failed = False
+_state_load_failed = False
 
 
 def app_dir() -> Path:
@@ -23,20 +32,65 @@ def _state_path() -> Path:
     return app_dir() / "state.json"
 
 
-def _read_json(path: Path, default):
-    if not path.is_file():
-        return default
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return default
-
-
 def _is_symlink(path: Path) -> bool:
     try:
         return path.is_symlink()
     except OSError:
         return True
+
+
+def _read_json(path: Path, default) -> tuple[object, bool]:
+    if _is_symlink(path):
+        return default, True
+    try:
+        if not path.exists():
+            return default, False
+    except OSError:
+        return default, True
+    flags = os.O_RDONLY
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        fd = os.open(str(path), flags)
+    except OSError:
+        return default, True
+    try:
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode):
+            return default, True
+        if st.st_size == 0:
+            return default, True
+        raw = os.read(fd, st.st_size)
+    except OSError:
+        return default, True
+    finally:
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+    try:
+        data = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return default, True
+    return data, False
+
+
+def _prepare_tmp(tmp: Path) -> None:
+    if _is_symlink(tmp):
+        raise OSError("refuse symlink write")
+    try:
+        exists = tmp.exists()
+    except OSError as exc:
+        raise OSError("refuse leftover tmp") from exc
+    if not exists:
+        return
+    try:
+        if tmp.is_file() and not _is_symlink(tmp):
+            tmp.unlink()
+            return
+    except OSError as exc:
+        raise OSError("refuse leftover tmp") from exc
+    raise OSError("refuse leftover tmp")
 
 
 def _write_json(path: Path, data) -> None:
@@ -46,10 +100,18 @@ def _write_json(path: Path, data) -> None:
     dest = path
     parent = dest.parent
     tmp = dest.with_name(dest.name + ".tmp")
+    parent.mkdir(parents=True, exist_ok=True)
     if _is_symlink(dest) or _is_symlink(parent) or _is_symlink(tmp):
         raise OSError("refuse symlink write")
-    parent.mkdir(parents=True, exist_ok=True)
-    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+    if dest.exists() and not _is_symlink(dest):
+        try:
+            size = dest.stat().st_size if dest.is_file() else -1
+        except OSError as exc:
+            raise OSError("refuse unreadable dest") from exc
+        if size > 0 and not payload.strip():
+            raise OSError("refuse empty overwrite")
+    _prepare_tmp(tmp)
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
     fd = os.open(str(tmp), flags, 0o644)
@@ -65,10 +127,11 @@ def _write_json(path: Path, data) -> None:
                 os.close(fd)
             except OSError:
                 pass
-        try:
-            tmp.unlink()
-        except OSError:
-            pass
+        if not _is_symlink(tmp):
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
         raise
     os.replace(str(tmp), str(dest))
     try:
@@ -84,8 +147,15 @@ def _write_json(path: Path, data) -> None:
 
 
 def load_config() -> dict:
-    data = _read_json(_config_path(), {"repos": [], "scan_roots": []})
+    global _config_load_failed
+    data, failed = _read_json(_config_path(), {"repos": [], "scan_roots": []})
+    _config_load_failed = failed
+    if failed:
+        return {"repos": [], "scan_roots": []}
     repos = data.get("repos") if isinstance(data, dict) else None
+    if not isinstance(data, dict):
+        _config_load_failed = True
+        return {"repos": [], "scan_roots": []}
     if not isinstance(repos, list):
         repos = []
     clean = []
@@ -117,13 +187,26 @@ def load_config() -> dict:
 
 
 def load_state() -> dict:
-    data = _read_json(_state_path(), {})
-    if not isinstance(data, dict):
-        return {}
+    global _state_load_failed
+    data, failed = _read_json(_state_path(), {})
+    if failed or not isinstance(data, dict):
+        _state_load_failed = True
+        return {"last_opened": "", "github_user": ""}
+    _state_load_failed = False
     return {
         "last_opened": str(data.get("last_opened") or ""),
         "github_user": str(data.get("github_user") or ""),
     }
+
+
+def config_unreadable() -> bool:
+    load_config()
+    return _config_load_failed
+
+
+def state_unreadable() -> bool:
+    load_state()
+    return _state_load_failed
 
 
 def set_github_user(login: str) -> None:
@@ -136,13 +219,15 @@ def set_github_user(login: str) -> None:
 
 
 def save_config(cfg: dict) -> None:
+    if config_unreadable():
+        raise StoreError("store unreadable")
     _write_json(_config_path(), cfg)
 
 
 def save_state(state: dict) -> None:
-    prev = _read_json(_state_path(), {})
-    if not isinstance(prev, dict):
-        prev = {}
+    prev = load_state()
+    if _state_load_failed:
+        raise StoreError("store unreadable")
     merged = {
         "last_opened": str(
             state["last_opened"] if "last_opened" in state else prev.get("last_opened") or ""

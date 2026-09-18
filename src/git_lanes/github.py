@@ -12,7 +12,7 @@ import webbrowser
 from pathlib import Path
 
 from git_lanes.discover import APP_ROOT, candidate_roots
-from git_lanes.gitio import GitError, fetch_all, is_work_tree, origin_url, toplevel
+from git_lanes.gitio import GitError, child_env, fetch_all, is_work_tree, origin_url, toplevel
 from git_lanes.store import load_state, resolve_repo, set_github_user, upsert_repo, visible_repos
 
 log = logging.getLogger("git_lanes.github")
@@ -87,6 +87,7 @@ def _run_gh(args: list[str], timeout: int = 60, *, hide: bool = True) -> str:
             errors="replace",
             shell=False,
             timeout=timeout,
+            env=child_env(),
             creationflags=flags,
         )
     except FileNotFoundError as exc:
@@ -339,7 +340,7 @@ def start_login() -> dict:
         st = status()
         return {"started": True, "already": False, **st}
 
-    env = os.environ.copy()
+    env = child_env()
     env["BROWSER"] = "false"
     env["GH_BROWSER"] = "false"
     flags = CREATE_NO_WINDOW if os.name == "nt" else 0

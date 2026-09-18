@@ -149,7 +149,7 @@ def walk_repos(
             continue
         for child in children:
             try:
-                if not child.is_dir():
+                if child.is_symlink() or not child.is_dir():
                     continue
             except OSError:
                 continue
