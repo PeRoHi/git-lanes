@@ -26,13 +26,17 @@ from git_lanes.gitio import (
 from git_lanes.httpguard import (
     check_request,
     client_error_message,
+    read_nofollow_file,
     resolve_web_file,
 )
 from git_lanes.store import (
+    StoreError,
+    config_unreadable,
     load_state,
     pick_last_or_none,
     resolve_repo,
     save_state,
+    state_unreadable,
     visible_repos,
 )
 
@@ -90,6 +94,13 @@ def _handle_api(method: str, parsed, body: bytes):
 
     if path == "/api/health" and method == "GET":
         return _json_bytes({"ok": True, "name": "git-lanes"})
+
+    if path == "/api/shutdown" and method == "POST":
+        shutdown_async()
+        return _json_bytes({"ok": True})
+
+    if path.startswith("/api/") and (config_unreadable() or state_unreadable()):
+        return _json_bytes({"error": "store unreadable"}, 503)
 
     if path == "/api/repos" and method == "GET":
         st = load_state()
@@ -247,10 +258,6 @@ def _handle_api(method: str, parsed, body: bytes):
         data["repo_id"] = rec["id"]
         return _json_bytes(data)
 
-    if path == "/api/shutdown" and method == "POST":
-        shutdown_async()
-        return _json_bytes({"ok": True})
-
     return 404, "application/json; charset=utf-8", b'{"error":"not found"}'
 
 
@@ -304,7 +311,10 @@ class Handler(BaseHTTPRequestHandler):
             ".svg": "image/svg+xml",
             ".ico": "image/x-icon",
         }
-        data = path.read_bytes()
+        data = read_nofollow_file(path)
+        if data is None:
+            self._send(404, "text/plain", b"not found")
+            return
         self._send(200, types.get(suffix, "application/octet-stream"), data)
 
     def do_GET(self) -> None:
@@ -314,6 +324,10 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path.startswith("/api/"):
             try:
                 status, ctype, payload = _handle_api("GET", parsed, b"")
+            except StoreError as exc:
+                status, ctype, payload = _json_bytes(
+                    {"error": client_error_message(exc)}, 503
+                )
             except GitError as exc:
                 status, ctype, payload = _json_bytes(
                     {"error": client_error_message(exc)}, 400
@@ -341,6 +355,10 @@ class Handler(BaseHTTPRequestHandler):
         body = self.rfile.read(length) if length else b""
         try:
             status, ctype, payload = _handle_api("POST", parsed, body)
+        except StoreError as exc:
+            status, ctype, payload = _json_bytes(
+                {"error": client_error_message(exc)}, 503
+            )
         except GitError as exc:
             status, ctype, payload = _json_bytes(
                 {"error": client_error_message(exc)}, 400

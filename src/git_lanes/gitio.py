@@ -18,6 +18,22 @@ FIELD_SEP = "\x1f"
 
 _GIT_EXE: str | None = None
 
+_GIT_OVERRIDE_KEYS = (
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_COMMON_DIR",
+    "GIT_INDEX_FILE",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+)
+
+
+def child_env() -> dict[str, str]:
+    env = os.environ.copy()
+    for key in _GIT_OVERRIDE_KEYS:
+        env.pop(key, None)
+    return env
+
 
 class GitError(Exception):
     pass
@@ -74,6 +90,7 @@ def run_git(cwd: Path, args: list[str], timeout: int = 30) -> str:
             errors="replace",
             shell=False,
             timeout=timeout,
+            env=child_env(),
             creationflags=_creationflags(),
         )
     except FileNotFoundError as exc:

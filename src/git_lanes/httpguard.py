@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import os
+import stat
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
 from git_lanes.gitio import GitError
+from git_lanes.store import StoreError
 
 # Messages we raise on purpose. Anything else is collapsed for the UI.
 SAFE_CLIENT_ERRORS = frozenset(
@@ -43,6 +46,8 @@ SAFE_CLIENT_ERRORS = frozenset(
         "invalid host",
         "invalid origin",
         "invalid body",
+        "invalid path",
+        "store unreadable",
         "request failed",
         "internal",
     }
@@ -51,6 +56,10 @@ SAFE_CLIENT_ERRORS = frozenset(
 GH_INSTALL_HINT = "GitHub CLI (gh) not found. Install from https://cli.github.com/"
 
 _LOOPBACK_NAMES = frozenset({"127.0.0.1", "localhost", "::1"})
+
+
+def has_c0_del(text: str) -> bool:
+    return any(ord(ch) < 32 or ord(ch) == 127 for ch in text)
 
 
 def loopback_host_headers(port: int) -> frozenset[str]:
@@ -64,8 +73,10 @@ def loopback_host_headers(port: int) -> frozenset[str]:
 
 
 def normalize_host_header(raw: str, *, expected_port: int) -> str | None:
-    host = (raw or "").strip().lower()
-    if not host or "/" in host or "\\" in host or "\x00" in host:
+    if raw is None or has_c0_del(raw):
+        return None
+    host = raw.strip().lower()
+    if not host or "/" in host or "\\" in host:
         return None
     if host.startswith("["):
         end = host.find("]")
@@ -105,7 +116,9 @@ def host_allowed(raw: str, *, expected_port: int) -> bool:
 
 
 def origin_allowed(raw: str, *, expected_port: int) -> bool:
-    origin = (raw or "").strip()
+    if raw is None or has_c0_del(raw):
+        return False
+    origin = raw.strip()
     if not origin or origin.lower() == "null":
         return False
     parsed = urlsplit(origin)
@@ -124,7 +137,9 @@ def origin_allowed(raw: str, *, expected_port: int) -> bool:
 
 
 def referer_allowed(raw: str, *, expected_port: int) -> bool:
-    referer = (raw or "").strip()
+    if raw is None or has_c0_del(raw):
+        return False
+    referer = raw.strip()
     if not referer:
         return False
     parsed = urlsplit(referer)
@@ -150,7 +165,7 @@ def check_request(headers, *, method: str, expected_port: int) -> tuple[bool, in
 
 
 def client_error_message(exc: BaseException) -> str:
-    if isinstance(exc, GitError):
+    if isinstance(exc, (GitError, StoreError)):
         msg = str(exc).strip()
         if msg in SAFE_CLIENT_ERRORS:
             return msg
@@ -161,21 +176,55 @@ def client_error_message(exc: BaseException) -> str:
 
 
 def nested_unquote(raw: str, *, max_rounds: int = 5) -> str | None:
+    if raw is None or has_c0_del(raw):
+        return None
     prev = raw
     for _ in range(max_rounds):
         cur = unquote(prev)
+        if has_c0_del(cur):
+            return None
         if cur == prev:
             return cur
         prev = cur
-    if unquote(prev) != prev:
+    nxt = unquote(prev)
+    if has_c0_del(nxt):
+        return None
+    if nxt != prev:
         return None
     return prev
+
+
+def read_nofollow_file(path: Path) -> bytes | None:
+    flags = os.O_RDONLY
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        fd = os.open(str(path), flags)
+    except OSError:
+        return None
+    try:
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode):
+            return None
+        chunks: list[bytes] = []
+        remaining = st.st_size
+        while remaining > 0:
+            chunk = os.read(fd, min(remaining, 64 * 1024))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        return b"".join(chunks)
+    except OSError:
+        return None
+    finally:
+        os.close(fd)
 
 
 def resolve_web_file(web_root: Path, url_path: str) -> Path | None:
     """Jail static paths. Decode (bounded) before '..' checks; refuse symlinks."""
     decoded = nested_unquote(url_path)
-    if decoded is None or "\x00" in decoded:
+    if decoded is None:
         return None
     decoded = decoded.replace("\\", "/")
     if decoded in ("", "/"):
@@ -211,4 +260,4 @@ def resolve_web_file(web_root: Path, url_path: str) -> Path | None:
         resolved.relative_to(root)
     except (OSError, ValueError):
         return None
-    return resolved
+    return cur

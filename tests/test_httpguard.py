@@ -3,6 +3,7 @@ from __future__ import annotations
 import http.client
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import time
@@ -17,9 +18,12 @@ from git_lanes.httpguard import (
     check_request,
     client_error_message,
     host_allowed,
+    nested_unquote,
     origin_allowed,
+    read_nofollow_file,
     resolve_web_file,
 )
+from git_lanes.store import StoreError
 
 
 class HttpGuardUnitTest(unittest.TestCase):
@@ -32,6 +36,11 @@ class HttpGuardUnitTest(unittest.TestCase):
         self.assertFalse(host_allowed("0.0.0.0:17920", expected_port=PORT))
         self.assertFalse(host_allowed("evil.example:17920", expected_port=PORT))
         self.assertFalse(host_allowed("127.0.0.1:80", expected_port=PORT))
+        self.assertFalse(host_allowed("127.0.0.1:17920\n", expected_port=PORT))
+        self.assertFalse(host_allowed("127.0.0.1:17920\r", expected_port=PORT))
+        self.assertFalse(host_allowed("127.0.0.1:17920\t", expected_port=PORT))
+        self.assertFalse(host_allowed("\x00127.0.0.1:17920", expected_port=PORT))
+        self.assertFalse(host_allowed("127.0.0.1:17920\x7f", expected_port=PORT))
 
     def test_origin_is_allowlist_not_host_equality(self):
         self.assertTrue(origin_allowed("http://127.0.0.1:17920", expected_port=PORT))
@@ -41,6 +50,8 @@ class HttpGuardUnitTest(unittest.TestCase):
         self.assertFalse(origin_allowed("http://127.0.0.1", expected_port=PORT))
         self.assertFalse(origin_allowed("http://evil.example", expected_port=PORT))
         self.assertFalse(origin_allowed("null", expected_port=PORT))
+        self.assertFalse(origin_allowed("http://127.0.0.1:17920\n", expected_port=PORT))
+        self.assertFalse(origin_allowed("http://127.0.0.1:17920\r", expected_port=PORT))
         # Matching a spoofed Host is not enough; Origin must be loopback.
         headers = {"Host": "127.0.0.1:17920", "Origin": "http://127.0.0.1:17920"}
         ok, status, _ = check_request(headers, method="POST", expected_port=PORT)
@@ -65,6 +76,11 @@ class HttpGuardUnitTest(unittest.TestCase):
             ),
             "GitHub CLI (gh) not found. Install from https://cli.github.com/",
         )
+        self.assertEqual(client_error_message(StoreError("store unreadable")), "store unreadable")
+        self.assertEqual(
+            client_error_message(StoreError("OSError: /home/u/secret")),
+            "request failed",
+        )
 
     def test_static_jail_rejects_dotdot_and_nested_encoding(self):
         with tempfile.TemporaryDirectory() as raw:
@@ -81,6 +97,17 @@ class HttpGuardUnitTest(unittest.TestCase):
             self.assertIsNone(resolve_web_file(web, "/%2e%2e/secret.txt"))
             self.assertIsNone(resolve_web_file(web, "/%252e%252e/secret.txt"))
             self.assertIsNone(resolve_web_file(web, "/..%2fsecret.txt"))
+            self.assertIsNone(resolve_web_file(web, "/index.html%00"))
+            self.assertIsNone(resolve_web_file(web, "/%0aindex.html"))
+            self.assertIsNone(resolve_web_file(web, "/%7findex.html"))
+            self.assertIsNone(resolve_web_file(web, "/%250aindex.html"))
+            self.assertIsNone(nested_unquote("/x%00y"))
+            self.assertIsNone(nested_unquote("/x%0ay"))
+            self.assertIsNone(nested_unquote("/x%7fy"))
+            self.assertIsNone(nested_unquote("/x%250ay"))
+            self.assertEqual(nested_unquote("/index.html"), "/index.html")
+            data = read_nofollow_file(web / "index.html")
+            self.assertEqual(data, b"ok")
 
     def test_static_jail_refuses_symlinks(self):
         with tempfile.TemporaryDirectory() as raw:
@@ -103,6 +130,7 @@ class HttpGuardUnitTest(unittest.TestCase):
             except OSError as exc:
                 self.skipTest("symlink not available: " + type(exc).__name__)
             self.assertIsNone(resolve_web_file(web, "/sub/up/secret.txt"))
+            self.assertIsNone(read_nofollow_file(link))
 
 
 class HttpGuardApiTest(unittest.TestCase):
@@ -184,6 +212,23 @@ class HttpGuardApiTest(unittest.TestCase):
         )
         self.assertIn(status, (403, 404))
         self.assertNotIn(b"from git_lanes", body)
+        self.assertNotIn(b"secret", body)
+        self.assertNotIn(b"/../", body)
+
+    def test_broken_store_is_fail_closed(self):
+        cfg = Path(os.environ["APPDATA"]) / "git-lanes" / "config.json"
+        cfg.parent.mkdir(parents=True, exist_ok=True)
+        cfg.write_text("{not-json", encoding="utf-8")
+        status, body = self._raw(
+            "GET",
+            "/api/repos",
+            {"Host": f"{self.HOST}:{PORT}"},
+        )
+        self.assertEqual(status, 503)
+        self.assertIn(b"store unreadable", body)
+        self.assertNotIn(str(cfg).encode("utf-8"), body)
+        self.assertNotIn(b"{not-json", body)
+        cfg.write_text('{"repos": [], "scan_roots": []}\n', encoding="utf-8")
 
 
 class GitStderrTest(unittest.TestCase):
@@ -195,6 +240,30 @@ class GitStderrTest(unittest.TestCase):
                 run_git(Path(raw), ["rev-parse", "definitely-not-a-rev"])
         self.assertEqual(str(cm.exception), "git failed")
         self.assertNotIn("fatal", str(cm.exception).lower())
+
+    def test_run_git_scrubs_git_dir(self):
+        from git_lanes.gitio import child_env, run_git
+
+        env = child_env()
+        self.assertNotIn("GIT_DIR", env)
+        self.assertNotIn("GIT_WORK_TREE", env)
+        with tempfile.TemporaryDirectory() as raw:
+            repo = Path(raw) / "repo"
+            repo.mkdir()
+            subprocess.run(
+                ["git", "init", "-b", "main"],
+                cwd=str(repo),
+                check=True,
+                capture_output=True,
+            )
+            os.environ["GIT_DIR"] = str(Path(raw) / "missing.git")
+            os.environ["GIT_WORK_TREE"] = str(Path(raw) / "missing-wt")
+            try:
+                out = run_git(repo, ["rev-parse", "--is-inside-work-tree"])
+            finally:
+                os.environ.pop("GIT_DIR", None)
+                os.environ.pop("GIT_WORK_TREE", None)
+            self.assertEqual(out.strip(), "true")
 
 
 if __name__ == "__main__":
