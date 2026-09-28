@@ -40,16 +40,21 @@ def _is_symlink(path: Path) -> bool:
 
 
 def _read_json(path: Path, default) -> tuple[object, bool]:
-    if _is_symlink(path):
-        return default, True
     try:
-        if not path.exists():
-            return default, False
+        before = os.lstat(path)
+    except FileNotFoundError:
+        return default, False
     except OSError:
+        return default, True
+    if stat.S_ISLNK(before.st_mode) or not stat.S_ISREG(before.st_mode):
+        return default, True
+    if before.st_size == 0:
         return default, True
     flags = os.O_RDONLY
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
+    if hasattr(os, "O_NONBLOCK"):
+        flags |= os.O_NONBLOCK
     try:
         fd = os.open(str(path), flags)
     except OSError:
@@ -58,7 +63,7 @@ def _read_json(path: Path, default) -> tuple[object, bool]:
         st = os.fstat(fd)
         if not stat.S_ISREG(st.st_mode):
             return default, True
-        if st.st_size == 0:
+        if (st.st_ino, st.st_dev) != (before.st_ino, before.st_dev):
             return default, True
         raw = os.read(fd, st.st_size)
     except OSError:
@@ -68,9 +73,17 @@ def _read_json(path: Path, default) -> tuple[object, bool]:
             os.close(fd)
         except OSError:
             pass
+    if not raw.strip():
+        return default, True
     try:
-        data = json.loads(raw.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError):
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return default, True
+    if not text.strip():
+        return default, True
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
         return default, True
     return data, False
 
@@ -120,7 +133,11 @@ def _write_json(path: Path, data) -> None:
             fd = -1
             fh.write(payload)
             fh.flush()
+            written = os.fstat(fh.fileno())
+            if not stat.S_ISREG(written.st_mode):
+                raise OSError("refuse nonregular tmp")
             os.fsync(fh.fileno())
+            tmp_id = (written.st_ino, written.st_dev)
     except Exception:
         if fd >= 0:
             try:
@@ -133,7 +150,26 @@ def _write_json(path: Path, data) -> None:
             except OSError:
                 pass
         raise
+    try:
+        after = os.lstat(tmp)
+    except OSError as exc:
+        raise OSError("refuse unreadable tmp") from exc
+    if not stat.S_ISREG(after.st_mode) or (after.st_ino, after.st_dev) != tmp_id:
+        raise OSError("refuse tmp identity change")
     os.replace(str(tmp), str(dest))
+    dest_flags = os.O_RDONLY
+    if hasattr(os, "O_NOFOLLOW"):
+        dest_flags |= os.O_NOFOLLOW
+    if hasattr(os, "O_NONBLOCK"):
+        dest_flags |= os.O_NONBLOCK
+    dest_fd = os.open(str(dest), dest_flags)
+    try:
+        dest_st = os.fstat(dest_fd)
+        if not stat.S_ISREG(dest_st.st_mode):
+            raise OSError("refuse nonregular dest")
+        os.fsync(dest_fd)
+    finally:
+        os.close(dest_fd)
     try:
         dir_fd = os.open(str(parent), os.O_RDONLY)
     except OSError:

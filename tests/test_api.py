@@ -55,7 +55,10 @@ class ApiTest(unittest.TestCase):
                 url,
                 data=raw,
                 method=method or "POST",
-                headers={"Content-Type": "application/json"},
+                headers={
+                    "Content-Type": "application/json",
+                    "Origin": f"http://{self.HOST}:{self.PORT}",
+                },
             )
         try:
             with urllib.request.urlopen(req, timeout=10) as resp:

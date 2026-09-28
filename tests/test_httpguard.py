@@ -3,6 +3,7 @@ from __future__ import annotations
 import http.client
 import json
 import os
+import socket
 import subprocess
 import sys
 import tempfile
@@ -20,6 +21,7 @@ from git_lanes.httpguard import (
     host_allowed,
     nested_unquote,
     origin_allowed,
+    parse_exact_uint,
     read_nofollow_file,
     resolve_web_file,
 )
@@ -27,6 +29,17 @@ from git_lanes.store import StoreError
 
 
 class HttpGuardUnitTest(unittest.TestCase):
+    def test_exact_uint_rejects_spaces_zeros_and_fullwidth(self):
+        self.assertEqual(parse_exact_uint("0"), 0)
+        self.assertEqual(parse_exact_uint("17920"), 17920)
+        self.assertIsNone(parse_exact_uint("017920"))
+        self.assertIsNone(parse_exact_uint(" 12"))
+        self.assertIsNone(parse_exact_uint("12 "))
+        self.assertIsNone(parse_exact_uint("1e2"))
+        self.assertIsNone(parse_exact_uint("１"))
+        self.assertIsNone(parse_exact_uint("-1"))
+        self.assertIsNone(parse_exact_uint(""))
+
     def test_host_requires_loopback_port(self):
         self.assertTrue(host_allowed("127.0.0.1:17920", expected_port=PORT))
         self.assertTrue(host_allowed("LOCALHOST:17920", expected_port=PORT))
@@ -41,6 +54,9 @@ class HttpGuardUnitTest(unittest.TestCase):
         self.assertFalse(host_allowed("127.0.0.1:17920\t", expected_port=PORT))
         self.assertFalse(host_allowed("\x00127.0.0.1:17920", expected_port=PORT))
         self.assertFalse(host_allowed("127.0.0.1:17920\x7f", expected_port=PORT))
+        self.assertFalse(host_allowed("127.0.0.1:017920", expected_port=PORT))
+        self.assertFalse(host_allowed("127.0.0.1:１７９２０", expected_port=PORT))
+        self.assertFalse(host_allowed("[::1]:017920", expected_port=PORT))
 
     def test_origin_is_allowlist_not_host_equality(self):
         self.assertTrue(origin_allowed("http://127.0.0.1:17920", expected_port=PORT))
@@ -52,6 +68,9 @@ class HttpGuardUnitTest(unittest.TestCase):
         self.assertFalse(origin_allowed("null", expected_port=PORT))
         self.assertFalse(origin_allowed("http://127.0.0.1:17920\n", expected_port=PORT))
         self.assertFalse(origin_allowed("http://127.0.0.1:17920\r", expected_port=PORT))
+        self.assertFalse(origin_allowed("http://127.0.0.1:017920", expected_port=PORT))
+        self.assertFalse(origin_allowed("http://user@127.0.0.1:17920", expected_port=PORT))
+        self.assertFalse(origin_allowed("http://127.0.0.1:17920@evil", expected_port=PORT))
         # Matching a spoofed Host is not enough; Origin must be loopback.
         headers = {"Host": "127.0.0.1:17920", "Origin": "http://127.0.0.1:17920"}
         ok, status, _ = check_request(headers, method="POST", expected_port=PORT)
@@ -62,6 +81,21 @@ class HttpGuardUnitTest(unittest.TestCase):
         self.assertFalse(ok)
         self.assertEqual(status, 403)
         self.assertEqual(msg, "invalid origin")
+        ok, status, msg = check_request(
+            {"Host": "127.0.0.1:17920"}, method="POST", expected_port=PORT
+        )
+        self.assertFalse(ok)
+        self.assertEqual(status, 403)
+        self.assertEqual(msg, "invalid origin")
+        ok, status, _ = check_request(
+            {
+                "Host": "127.0.0.1:17920",
+                "Referer": "http://127.0.0.1:17920/index.html",
+            },
+            method="POST",
+            expected_port=PORT,
+        )
+        self.assertTrue(ok)
 
     def test_client_errors_drop_paths_and_stderr(self):
         self.assertEqual(client_error_message(GitError("unknown repo")), "unknown repo")
@@ -204,6 +238,35 @@ class HttpGuardApiTest(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertTrue(json.loads(body.decode("utf-8"))["ok"])
 
+        status, body = self._raw(
+            "POST",
+            "/api/shutdown",
+            {
+                "Host": f"{self.HOST}:{PORT}",
+                "Content-Type": "application/json",
+                "Content-Length": "2",
+            },
+            b"{}",
+        )
+        self.assertEqual(status, 403)
+        self.assertIn(b"invalid origin", body)
+
+        raw = (
+            f"POST /api/shutdown HTTP/1.1\r\n"
+            f"Host: {self.HOST}:{PORT}\r\n"
+            f"Origin: http://{self.HOST}:{PORT}\r\n"
+            f"Content-Type: application/json\r\n"
+            f"Content-Length: 02\r\n"
+            f"\r\n"
+            f"{{}}"
+        ).encode("ascii")
+        with socket.create_connection((self.HOST, PORT), timeout=5) as sock:
+            sock.sendall(raw)
+            sock.settimeout(2)
+            data = sock.recv(4096)
+        self.assertTrue(data.startswith(b"HTTP/1.1 400"), data)
+        self.assertIn(b"invalid body", data)
+
     def test_static_traversal_is_forbidden(self):
         status, body = self._raw(
             "GET",
@@ -247,6 +310,9 @@ class GitStderrTest(unittest.TestCase):
         env = child_env()
         self.assertNotIn("GIT_DIR", env)
         self.assertNotIn("GIT_WORK_TREE", env)
+        self.assertNotIn("GIT_OBJECT_DIRECTORY", env)
+        self.assertNotIn("GIT_CONFIG_GLOBAL", env)
+        self.assertTrue(all(not k.startswith("GIT_") for k in env))
         with tempfile.TemporaryDirectory() as raw:
             repo = Path(raw) / "repo"
             repo.mkdir()
@@ -258,11 +324,15 @@ class GitStderrTest(unittest.TestCase):
             )
             os.environ["GIT_DIR"] = str(Path(raw) / "missing.git")
             os.environ["GIT_WORK_TREE"] = str(Path(raw) / "missing-wt")
+            os.environ["GIT_OBJECT_DIRECTORY"] = str(Path(raw) / "missing-objects")
+            os.environ["GIT_CONFIG_GLOBAL"] = str(Path(raw) / "missing.gitconfig")
             try:
                 out = run_git(repo, ["rev-parse", "--is-inside-work-tree"])
             finally:
                 os.environ.pop("GIT_DIR", None)
                 os.environ.pop("GIT_WORK_TREE", None)
+                os.environ.pop("GIT_OBJECT_DIRECTORY", None)
+                os.environ.pop("GIT_CONFIG_GLOBAL", None)
             self.assertEqual(out.strip(), "true")
 
 

@@ -55,11 +55,29 @@ SAFE_CLIENT_ERRORS = frozenset(
 
 GH_INSTALL_HINT = "GitHub CLI (gh) not found. Install from https://cli.github.com/"
 
-_LOOPBACK_NAMES = frozenset({"127.0.0.1", "localhost", "::1"})
+_ASCII_DIGITS = frozenset("0123456789")
 
 
 def has_c0_del(text: str) -> bool:
     return any(ord(ch) < 32 or ord(ch) == 127 for ch in text)
+
+
+def parse_exact_uint(raw: str) -> int | None:
+    """ASCII digits only. No spaces, leading zeros, or fullwidth digits."""
+    if raw is None or has_c0_del(raw):
+        return None
+    if not raw or any(ch not in _ASCII_DIGITS for ch in raw):
+        return None
+    if raw != str(int(raw)):
+        return None
+    return int(raw)
+
+
+def parse_exact_port(raw: str) -> int | None:
+    port = parse_exact_uint(raw)
+    if port is None or port < 1 or port > 65535:
+        return None
+    return port
 
 
 def loopback_host_headers(port: int) -> frozenset[str]:
@@ -88,10 +106,7 @@ def normalize_host_header(raw: str, *, expected_port: int) -> str | None:
             if expected_port in (80, 443):
                 return f"[{name}]"
             return None
-        try:
-            port = int(rest[1:])
-        except ValueError:
-            return None
+        port = parse_exact_port(rest[1:])
         if port != expected_port:
             return None
         return f"[{name}]:{port}"
@@ -100,9 +115,9 @@ def normalize_host_header(raw: str, *, expected_port: int) -> str | None:
             return host
         return None
     name, _, port_s = host.rpartition(":")
-    if not name or not port_s.isdigit():
+    if not name:
         return None
-    port = int(port_s)
+    port = parse_exact_port(port_s)
     if port != expected_port:
         return None
     return f"{name}:{port}"
@@ -124,16 +139,14 @@ def origin_allowed(raw: str, *, expected_port: int) -> bool:
     parsed = urlsplit(origin)
     if parsed.scheme != "http":
         return False
-    if parsed.username or parsed.password or parsed.query or parsed.fragment:
+    if "@" in parsed.netloc or parsed.username or parsed.password:
+        return False
+    if parsed.query or parsed.fragment:
         return False
     if parsed.path not in ("", "/"):
         return False
-    host = (parsed.hostname or "").lower()
-    if host not in _LOOPBACK_NAMES:
-        return False
-    if parsed.port != expected_port:
-        return False
-    return True
+    # Authority port must be exact decimal, not urlsplit().port (leading zeros).
+    return host_allowed(parsed.netloc, expected_port=expected_port)
 
 
 def referer_allowed(raw: str, *, expected_port: int) -> bool:
@@ -159,7 +172,7 @@ def check_request(headers, *, method: str, expected_port: int) -> tuple[bool, in
         return True, 200, ""
     if method.upper() in {"POST", "PUT", "PATCH", "DELETE"}:
         referer = headers.get("Referer")
-        if referer and not referer_allowed(referer, expected_port=expected_port):
+        if not referer or not referer_allowed(referer, expected_port=expected_port):
             return False, 403, "invalid origin"
     return True, 200, ""
 
@@ -194,17 +207,31 @@ def nested_unquote(raw: str, *, max_rounds: int = 5) -> str | None:
     return prev
 
 
-def read_nofollow_file(path: Path) -> bytes | None:
+def _nofollow_read_flags() -> int:
     flags = os.O_RDONLY
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
+    if hasattr(os, "O_NONBLOCK"):
+        flags |= os.O_NONBLOCK
+    return flags
+
+
+def read_nofollow_file(path: Path) -> bytes | None:
     try:
-        fd = os.open(str(path), flags)
+        before = os.lstat(path)
+    except OSError:
+        return None
+    if stat.S_ISLNK(before.st_mode) or not stat.S_ISREG(before.st_mode):
+        return None
+    try:
+        fd = os.open(str(path), _nofollow_read_flags())
     except OSError:
         return None
     try:
         st = os.fstat(fd)
         if not stat.S_ISREG(st.st_mode):
+            return None
+        if (st.st_ino, st.st_dev) != (before.st_ino, before.st_dev):
             return None
         chunks: list[bytes] = []
         remaining = st.st_size

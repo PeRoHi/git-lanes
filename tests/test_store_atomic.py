@@ -98,6 +98,18 @@ class AtomicWriteTest(unittest.TestCase):
             save_config({"repos": [], "scan_roots": []})
         self.assertEqual(path.read_text(encoding="utf-8"), "{broken")
 
+    def test_whitespace_config_is_load_failed(self):
+        from git_lanes.store import StoreError, config_unreadable, load_config, save_config
+
+        path = Path(os.environ["APPDATA"]) / "git-lanes" / "config.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(" \n\t", encoding="utf-8")
+        load_config()
+        self.assertTrue(config_unreadable())
+        with self.assertRaises(StoreError):
+            save_config({"repos": [], "scan_roots": []})
+        self.assertEqual(path.read_text(encoding="utf-8"), " \n\t")
+
     def test_empty_config_is_load_failed(self):
         from git_lanes.store import StoreError, config_unreadable, load_config, save_config
 

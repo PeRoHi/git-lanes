@@ -4,6 +4,7 @@ import logging
 import os
 import re
 import shutil
+import stat
 import subprocess
 from pathlib import Path
 
@@ -18,21 +19,24 @@ FIELD_SEP = "\x1f"
 
 _GIT_EXE: str | None = None
 
-_GIT_OVERRIDE_KEYS = (
-    "GIT_DIR",
-    "GIT_WORK_TREE",
-    "GIT_COMMON_DIR",
-    "GIT_INDEX_FILE",
-    "GIT_OBJECT_DIRECTORY",
-    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
-)
-
-
 def child_env() -> dict[str, str]:
     env = os.environ.copy()
-    for key in _GIT_OVERRIDE_KEYS:
-        env.pop(key, None)
+    for key in list(env):
+        if key == "GIT" or key.startswith("GIT_"):
+            env.pop(key, None)
     return env
+
+
+def git_metadata_ok(path: Path) -> bool:
+    """Refuse a symlink .git leaf. File (worktree gitdir) or directory is ok."""
+    git = path / ".git"
+    try:
+        st = os.lstat(git)
+    except OSError:
+        return False
+    if stat.S_ISLNK(st.st_mode):
+        return False
+    return stat.S_ISDIR(st.st_mode) or stat.S_ISREG(st.st_mode)
 
 
 class GitError(Exception):
@@ -109,6 +113,8 @@ def is_work_tree(path: Path) -> bool:
         if not path.is_dir():
             return False
     except OSError:
+        return False
+    if not git_metadata_ok(path):
         return False
     try:
         out = run_git(path, ["rev-parse", "--is-inside-work-tree"])

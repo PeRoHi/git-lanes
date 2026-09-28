@@ -4,7 +4,7 @@ import logging
 import time
 from pathlib import Path
 
-from git_lanes.gitio import GitError, is_work_tree, toplevel
+from git_lanes.gitio import GitError, git_metadata_ok, is_work_tree, toplevel
 from git_lanes.store import (
     add_scan_root,
     load_config,
@@ -103,11 +103,7 @@ def candidate_roots(
 
 
 def looks_like_git(path: Path) -> bool:
-    git = path / ".git"
-    try:
-        return git.is_dir() or git.is_file()
-    except OSError:
-        return False
+    return git_metadata_ok(path)
 
 
 def walk_repos(
