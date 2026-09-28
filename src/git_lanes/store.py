@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import stat
 from pathlib import Path
+
+log = logging.getLogger("git_lanes.store")
 
 APP_DIR_NAME = "git-lanes"
 
@@ -157,19 +160,36 @@ def _write_json(path: Path, data) -> None:
     if not stat.S_ISREG(after.st_mode) or (after.st_ino, after.st_dev) != tmp_id:
         raise OSError("refuse tmp identity change")
     os.replace(str(tmp), str(dest))
-    dest_flags = os.O_RDONLY
-    if hasattr(os, "O_NOFOLLOW"):
-        dest_flags |= os.O_NOFOLLOW
-    if hasattr(os, "O_NONBLOCK"):
-        dest_flags |= os.O_NONBLOCK
-    dest_fd = os.open(str(dest), dest_flags)
     try:
-        dest_st = os.fstat(dest_fd)
-        if not stat.S_ISREG(dest_st.st_mode):
+        dest_lstat = os.lstat(dest)
+    except OSError as exc:
+        log.info("dest fsync skipped: %s", exc)
+    else:
+        if stat.S_ISLNK(dest_lstat.st_mode) or not stat.S_ISREG(dest_lstat.st_mode):
             raise OSError("refuse nonregular dest")
-        os.fsync(dest_fd)
-    finally:
-        os.close(dest_fd)
+        dest_flags = os.O_RDWR if os.name == "nt" else os.O_RDONLY
+        if hasattr(os, "O_NOFOLLOW"):
+            dest_flags |= os.O_NOFOLLOW
+        if hasattr(os, "O_NONBLOCK"):
+            dest_flags |= os.O_NONBLOCK
+        try:
+            dest_fd = os.open(str(dest), dest_flags)
+        except OSError as exc:
+            log.info("dest fsync skipped: %s", exc)
+        else:
+            try:
+                dest_st = os.fstat(dest_fd)
+                if not stat.S_ISREG(dest_st.st_mode):
+                    raise OSError("refuse nonregular dest")
+                try:
+                    os.fsync(dest_fd)
+                except OSError as exc:
+                    log.info("dest fsync skipped: %s", exc)
+            finally:
+                try:
+                    os.close(dest_fd)
+                except OSError:
+                    pass
     try:
         dir_fd = os.open(str(parent), os.O_RDONLY)
     except OSError:

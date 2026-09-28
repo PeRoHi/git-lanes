@@ -19,10 +19,25 @@ FIELD_SEP = "\x1f"
 
 _GIT_EXE: str | None = None
 
+# Transport / credential knobs only. Repo layout, config files, and
+# TLS-verify bypass stay stripped so child git cannot be redirected.
+_GIT_ENV_KEEP = {
+    "GIT_SSH",
+    "GIT_SSH_COMMAND",
+    "GIT_SSH_VARIANT",
+    "GIT_ASKPASS",
+    "GIT_TERMINAL_PROMPT",
+    "GIT_SSL_CAINFO",
+    "GIT_SSL_CAPATH",
+    "GIT_PROXY_COMMAND",
+    "GIT_HTTP_PROXY_AUTHMETHOD",
+}
+
+
 def child_env() -> dict[str, str]:
     env = os.environ.copy()
     for key in list(env):
-        if key == "GIT" or key.startswith("GIT_"):
+        if key == "GIT" or (key.startswith("GIT_") and key not in _GIT_ENV_KEEP):
             env.pop(key, None)
     return env
 

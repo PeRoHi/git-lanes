@@ -305,14 +305,32 @@ class GitStderrTest(unittest.TestCase):
         self.assertNotIn("fatal", str(cm.exception).lower())
 
     def test_run_git_scrubs_git_dir(self):
-        from git_lanes.gitio import child_env, run_git
+        from git_lanes.gitio import _GIT_ENV_KEEP, child_env, run_git
 
-        env = child_env()
-        self.assertNotIn("GIT_DIR", env)
-        self.assertNotIn("GIT_WORK_TREE", env)
-        self.assertNotIn("GIT_OBJECT_DIRECTORY", env)
-        self.assertNotIn("GIT_CONFIG_GLOBAL", env)
-        self.assertTrue(all(not k.startswith("GIT_") for k in env))
+        extra = {
+            "GIT_SSH_COMMAND": "ssh -o BatchMode=yes",
+            "GIT_CONFIG_GLOBAL": "/tmp/missing.gitconfig",
+            "GIT_SSL_NO_VERIFY": "1",
+        }
+        saved = {key: os.environ.get(key) for key in extra}
+        os.environ.update(extra)
+        try:
+            env = child_env()
+            self.assertEqual(env.get("GIT_SSH_COMMAND"), extra["GIT_SSH_COMMAND"])
+            self.assertNotIn("GIT_DIR", env)
+            self.assertNotIn("GIT_WORK_TREE", env)
+            self.assertNotIn("GIT_OBJECT_DIRECTORY", env)
+            self.assertNotIn("GIT_CONFIG_GLOBAL", env)
+            self.assertNotIn("GIT_SSL_NO_VERIFY", env)
+            self.assertTrue(
+                all(not k.startswith("GIT_") or k in _GIT_ENV_KEEP for k in env)
+            )
+        finally:
+            for key, value in saved.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
         with tempfile.TemporaryDirectory() as raw:
             repo = Path(raw) / "repo"
             repo.mkdir()
@@ -326,13 +344,21 @@ class GitStderrTest(unittest.TestCase):
             os.environ["GIT_WORK_TREE"] = str(Path(raw) / "missing-wt")
             os.environ["GIT_OBJECT_DIRECTORY"] = str(Path(raw) / "missing-objects")
             os.environ["GIT_CONFIG_GLOBAL"] = str(Path(raw) / "missing.gitconfig")
+            os.environ["GIT_SSL_NO_VERIFY"] = "1"
+            os.environ["GIT_SSH_COMMAND"] = "ssh -o BatchMode=yes"
             try:
                 out = run_git(repo, ["rev-parse", "--is-inside-work-tree"])
+                env = child_env()
+                self.assertEqual(env.get("GIT_SSH_COMMAND"), "ssh -o BatchMode=yes")
+                self.assertNotIn("GIT_CONFIG_GLOBAL", env)
+                self.assertNotIn("GIT_SSL_NO_VERIFY", env)
             finally:
                 os.environ.pop("GIT_DIR", None)
                 os.environ.pop("GIT_WORK_TREE", None)
                 os.environ.pop("GIT_OBJECT_DIRECTORY", None)
                 os.environ.pop("GIT_CONFIG_GLOBAL", None)
+                os.environ.pop("GIT_SSL_NO_VERIFY", None)
+                os.environ.pop("GIT_SSH_COMMAND", None)
             self.assertEqual(out.strip(), "true")
 
 
