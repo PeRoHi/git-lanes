@@ -26,6 +26,7 @@ from git_lanes.gitio import (
 from git_lanes.httpguard import (
     check_request,
     client_error_message,
+    parse_exact_uint,
     read_nofollow_file,
     resolve_web_file,
 )
@@ -206,11 +207,10 @@ def _handle_api(method: str, parsed, body: bytes):
             return _json_bytes({"need_open": True, "commits": []})
         if repo_path is None or not is_work_tree(repo_path):
             raise GitError("not a git repository")
-        try:
-            offset = int((qs.get("offset") or ["0"])[0])
-            limit = int((qs.get("limit") or [str(INITIAL_LOAD)])[0])
-        except ValueError as exc:
-            raise GitError("invalid paging") from exc
+        offset = parse_exact_uint((qs.get("offset") or ["0"])[0])
+        limit = parse_exact_uint((qs.get("limit") or [str(INITIAL_LOAD)])[0])
+        if offset is None or limit is None:
+            raise GitError("invalid paging")
         if offset < 0 or offset > 20_000:
             raise GitError("invalid paging")
         limit = min(max(limit, 1), LOAD_MORE * 2)
@@ -285,8 +285,24 @@ class Handler(BaseHTTPRequestHandler):
         )
         if ok:
             return True
+        self._drain_body()
         self._send(status, "application/json; charset=utf-8", _json_bytes({"error": msg}, status)[2])
         return False
+
+    def _drain_body(self) -> None:
+        raw_len = self.headers.get("Content-Length") or "0"
+        length = parse_exact_uint(raw_len)
+        if length is None or length < 0:
+            return
+        remaining = min(length, MAX_BODY)
+        try:
+            while remaining > 0:
+                chunk = self.rfile.read(min(remaining, 64 * 1024))
+                if not chunk:
+                    break
+                remaining -= len(chunk)
+        except OSError:
+            return
 
     def _static(self, rel: str) -> None:
         path = resolve_web_file(WEB, rel)
@@ -344,12 +360,11 @@ class Handler(BaseHTTPRequestHandler):
             return
         parsed = urlparse(self.path)
         raw_len = self.headers.get("Content-Length") or "0"
-        try:
-            length = int(raw_len)
-        except ValueError:
+        length = parse_exact_uint(raw_len)
+        if length is None:
             self._send(400, "application/json; charset=utf-8", b'{"error":"invalid body"}')
             return
-        if length < 0 or length > MAX_BODY:
+        if length > MAX_BODY:
             self._send(400, "application/json; charset=utf-8", b'{"error":"invalid body"}')
             return
         body = self.rfile.read(length) if length else b""

@@ -16,6 +16,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from git_lanes import HOST, PORT
 from git_lanes.gitio import GitError, child_env, git_exe
+from git_lanes.httpguard import parse_exact_uint
 from git_lanes.server import shutdown_async, start_background
 
 LOG_DIR = ROOT / "logs"
@@ -69,12 +70,13 @@ def netstat_listening_pid(line: str, port: int) -> str | None:
         port_s = local.rsplit("]:", 1)[-1]
     else:
         port_s = local.rsplit(":", 1)[-1]
-    if not port_s.isdigit() or int(port_s) != port:
+    got = parse_exact_uint(port_s)
+    if got != port:
         return None
     pid = parts[-1]
-    if pid.isdigit():
-        return pid
-    return None
+    if parse_exact_uint(pid) is None:
+        return None
+    return pid
 
 
 def reclaim_port(port: int) -> None:

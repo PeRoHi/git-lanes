@@ -58,6 +58,29 @@ class AtomicWriteTest(unittest.TestCase):
             _write_json(dest, {"repos": []})
         self.assertEqual(target.read_text(encoding="utf-8"), "{}\n")
 
+    def test_dest_fsync_oserror_still_writes(self):
+        from git_lanes.store import _write_json
+
+        dest = Path(self.tmp.name) / "cfg.json"
+        real_fsync = os.fsync
+        seen = {"n": 0}
+
+        def boom(fd):
+            seen["n"] += 1
+            if seen["n"] >= 2:
+                raise OSError(9, "Bad file descriptor")
+            return real_fsync(fd)
+
+        os.fsync = boom
+        try:
+            _write_json(dest, {"ok": True})
+        finally:
+            os.fsync = real_fsync
+        self.assertTrue(dest.is_file())
+        text = dest.read_text(encoding="utf-8")
+        self.assertIn('"ok"', text)
+        self.assertIn("true", text)
+
     def test_leftover_regular_tmp_is_replaced(self):
         from git_lanes.store import _write_json
 
@@ -97,6 +120,18 @@ class AtomicWriteTest(unittest.TestCase):
         with self.assertRaises(StoreError):
             save_config({"repos": [], "scan_roots": []})
         self.assertEqual(path.read_text(encoding="utf-8"), "{broken")
+
+    def test_whitespace_config_is_load_failed(self):
+        from git_lanes.store import StoreError, config_unreadable, load_config, save_config
+
+        path = Path(os.environ["APPDATA"]) / "git-lanes" / "config.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(" \n\t", encoding="utf-8")
+        load_config()
+        self.assertTrue(config_unreadable())
+        with self.assertRaises(StoreError):
+            save_config({"repos": [], "scan_roots": []})
+        self.assertEqual(path.read_text(encoding="utf-8"), " \n\t")
 
     def test_empty_config_is_load_failed(self):
         from git_lanes.store import StoreError, config_unreadable, load_config, save_config

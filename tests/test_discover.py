@@ -91,6 +91,24 @@ class DiscoverTest(unittest.TestCase):
         self.assertNotIn("linked", found)
         self.assertNotIn("outside", found)
 
+    def test_walk_repos_skips_symlink_git_leaf(self):
+        from git_lanes.discover import looks_like_git, walk_repos
+        from git_lanes.gitio import is_work_tree
+
+        root = Path(self.tmp.name) / "ws"
+        decoy = root / "decoy"
+        decoy.mkdir(parents=True)
+        target = Path(self.tmp.name) / "other.git"
+        target.mkdir()
+        try:
+            (decoy / ".git").symlink_to(target)
+        except OSError as exc:
+            self.skipTest("symlink not available: " + type(exc).__name__)
+        self.assertFalse(looks_like_git(decoy))
+        self.assertFalse(is_work_tree(decoy))
+        found = {p.name for p in walk_repos([root])}
+        self.assertNotIn("decoy", found)
+
     def test_scan_merges_without_stealing_last_opened(self):
         from git_lanes.discover import scan_and_merge
         from git_lanes.store import load_state, pick_last_or_none, upsert_repo
