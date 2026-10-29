@@ -223,9 +223,9 @@ def _profile_pids() -> list[int]:
         return []
     pids = []
     for line in out.splitlines():
-        line = line.strip()
-        if line.isdigit():
-            pids.append(int(line))
+        pid = parse_exact_uint(line.strip())
+        if pid is not None and pid > 0:
+            pids.append(pid)
     return pids
 
 

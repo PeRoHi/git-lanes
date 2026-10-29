@@ -74,6 +74,28 @@ class GithubNameTest(unittest.TestCase):
         with self.assertRaises(GitError):
             clone_named("not-a-nwo")
 
+    def test_clone_refuses_symlink_dest(self):
+        from git_lanes import github
+        from git_lanes.gitio import GitError
+
+        with tempfile.TemporaryDirectory() as td:
+            parent = Path(td)
+            target = parent / "target"
+            target.mkdir()
+            link = parent / "sample"
+            try:
+                link.symlink_to(target)
+            except OSError as exc:
+                self.skipTest("symlink not available: " + type(exc).__name__)
+            orig = github.clone_parent
+            github.clone_parent = lambda: parent
+            try:
+                with self.assertRaises(GitError) as ctx:
+                    github.clone_named("PeRoHi/sample")
+                self.assertIn("folder exists", str(ctx.exception))
+            finally:
+                github.clone_parent = orig
+
 
 class GithubStatusApiTest(unittest.TestCase):
     def setUp(self):

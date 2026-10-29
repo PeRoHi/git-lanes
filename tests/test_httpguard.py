@@ -200,12 +200,17 @@ class HttpGuardApiTest(unittest.TestCase):
         self.tmp.cleanup()
 
     def _raw(self, method, path, headers, body=None):
+        status, data, _hdrs = self._raw_with_headers(method, path, headers, body)
+        return status, data
+
+    def _raw_with_headers(self, method, path, headers, body=None):
         conn = http.client.HTTPConnection(self.HOST, PORT, timeout=5)
         conn.request(method, path, body=body, headers=headers)
         resp = conn.getresponse()
         data = resp.read()
+        hdrs = {k.lower(): v for k, v in resp.getheaders()}
         conn.close()
-        return resp.status, data
+        return resp.status, data, hdrs
 
     def test_rejects_host_without_port_and_foreign_origin(self):
         status, body = self._raw(
@@ -230,13 +235,14 @@ class HttpGuardApiTest(unittest.TestCase):
         self.assertEqual(status, 403)
         self.assertIn(b"invalid origin", body)
 
-        status, body = self._raw(
+        status, body, hdrs = self._raw_with_headers(
             "GET",
             "/api/health",
             {"Host": f"{self.HOST}:{PORT}"},
         )
         self.assertEqual(status, 200)
         self.assertTrue(json.loads(body.decode("utf-8"))["ok"])
+        self.assertEqual(hdrs.get("x-content-type-options"), "nosniff")
 
         status, body = self._raw(
             "POST",
@@ -263,7 +269,26 @@ class HttpGuardApiTest(unittest.TestCase):
         with socket.create_connection((self.HOST, PORT), timeout=5) as sock:
             sock.sendall(raw)
             sock.settimeout(2)
-            data = sock.recv(4096)
+            chunks = []
+            while True:
+                try:
+                    chunk = sock.recv(4096)
+                except TimeoutError:
+                    break
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                data = b"".join(chunks)
+                if b"\r\n\r\n" in data:
+                    head, _, body = data.partition(b"\r\n\r\n")
+                    cl = None
+                    for line in head.split(b"\r\n")[1:]:
+                        if line.lower().startswith(b"content-length:"):
+                            cl = int(line.split(b":", 1)[1].strip())
+                            break
+                    if cl is not None and len(body) >= cl:
+                        break
+            data = b"".join(chunks)
         self.assertTrue(data.startswith(b"HTTP/1.1 400"), data)
         self.assertIn(b"invalid body", data)
 

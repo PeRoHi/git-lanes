@@ -154,6 +154,17 @@ def fetch_all(path: Path) -> str:
     return run_git(path, ["fetch", "--all", "--prune"], timeout=120)
 
 
+def _parse_unix_ts(raw: str) -> int:
+    """ASCII decimal seconds only. str.isdigit() accepts fullwidth digits."""
+    text = str(raw or "").strip()
+    if not text or any(ch not in "0123456789" for ch in text):
+        return 0
+    try:
+        return int(text)
+    except ValueError:
+        return 0
+
+
 def _parse_log(raw: str) -> list[Commit]:
     commits: list[Commit] = []
     if not raw:
@@ -175,10 +186,7 @@ def _parse_log(raw: str) -> list[Commit]:
         chash = chash.strip()
         if not chash:
             continue
-        try:
-            author_at = int(at_s.strip() or "0")
-        except ValueError:
-            author_at = 0
+        author_at = _parse_unix_ts(at_s)
         parents = [p for p in parents_s.split() if p]
         commits.append(
             Commit(
@@ -246,10 +254,11 @@ def _parse_track(raw: str) -> dict:
     text = str(raw or "").strip()
     ahead = 0
     behind = 0
-    m = re.search(r"ahead (\d+)", text)
+    # [0-9] not \\d: Python \\d matches Unicode digits.
+    m = re.search(r"ahead ([0-9]+)", text)
     if m:
         ahead = int(m.group(1))
-    m = re.search(r"behind (\d+)", text)
+    m = re.search(r"behind ([0-9]+)", text)
     if m:
         behind = int(m.group(1))
     return {
@@ -286,10 +295,7 @@ def list_refs(path: Path) -> dict:
         refname = bits[2]
         current = bits[3].strip() == "*"
         kind_raw = bits[4]
-        try:
-            author_at = int((bits[5] or "0").strip() or "0")
-        except ValueError:
-            author_at = 0
+        author_at = _parse_unix_ts(bits[5])
         author = bits[6]
         subject = bits[7]
         upstream = bits[8] if len(bits) > 8 else ""
@@ -371,10 +377,7 @@ def _stash_commits(path: Path) -> list[Commit]:
         bits = line.split(FIELD_SEP)
         if len(bits) < 6:
             continue
-        try:
-            author_at = int((bits[3] or "0").strip() or "0")
-        except ValueError:
-            author_at = 0
+        author_at = _parse_unix_ts(bits[3])
         label = bits[5].strip() or "stash"
         out.append(
             Commit(
@@ -504,6 +507,9 @@ def load_graph(
     for c in git_commits:
         c.refs = refs.get(c.hash, [])
 
+    # Uncommitted / stash sit above the git page. Client Load More sends an
+    # offset that counts only non-extra commits, so extras must not shift the
+    # git window (rows[offset:] previously duplicated rows when extras > 0).
     extras: list[Commit] = []
     if not checked:
         if _has_uncommitted(path):
@@ -526,7 +532,11 @@ def load_graph(
     rows = extras + git_commits
 
     assign_lanes(rows)
-    page = rows[offset : offset + limit]
+    if offset == 0:
+        page = rows[: len(extras) + limit]
+    else:
+        start = len(extras) + offset
+        page = rows[start : start + limit]
     lane_count = 1
     for c in page:
         lane_count = max(
@@ -582,7 +592,7 @@ def load_commit(path: Path, chash: str) -> dict:
         "hash": full,
         "parents": [p for p in parts[1].split() if p],
         "author": parts[2],
-        "author_at": int(parts[3] or "0") if str(parts[3] or "0").strip().isdigit() else 0,
+        "author_at": _parse_unix_ts(parts[3]),
         "subject": parts[4],
         "body": parts[5].strip("\n"),
         "refs": refs.get(full, []),

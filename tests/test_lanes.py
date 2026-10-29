@@ -9,7 +9,24 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from git_lanes.gitio import _parse_track, _parse_unix_ts
 from git_lanes.lanes import Commit, assign_lanes
+
+
+class ParseHelpersTest(unittest.TestCase):
+    def test_unix_ts_rejects_fullwidth_and_spaces(self):
+        self.assertEqual(_parse_unix_ts("1700000000"), 1700000000)
+        self.assertEqual(_parse_unix_ts("0"), 0)
+        self.assertEqual(_parse_unix_ts(" 12\n"), 12)
+        self.assertEqual(_parse_unix_ts("１"), 0)
+        self.assertEqual(_parse_unix_ts("1 2"), 0)
+        self.assertEqual(_parse_unix_ts("12a"), 0)
+        self.assertEqual(_parse_unix_ts(""), 0)
+
+    def test_track_uses_ascii_digits_only(self):
+        self.assertEqual(_parse_track("[ahead 2, behind 3]")["ahead"], 2)
+        self.assertEqual(_parse_track("[ahead 2, behind 3]")["behind"], 3)
+        self.assertEqual(_parse_track("[ahead ２]")["ahead"], 0)
 
 
 def _c(h: str, parents: list[str], subject: str = "") -> Commit:
@@ -222,6 +239,37 @@ class FixtureGitTest(unittest.TestCase):
             self._git(dirty, ["stash", "push", "-u", "-m", "park"])
             stashed = load_graph(dirty, 0, 300)
             self.assertTrue(any(c.get("stash") for c in stashed["commits"]))
+
+            paged = root / "paged"
+            self._init(paged)
+            for i in range(8):
+                self._commit(paged, f"p{i}", 1_700_000_000 + i)
+            (paged / "wip.txt").write_text("x", encoding="utf-8")
+            first = load_graph(paged, 0, 3)
+            self.assertTrue(first["commits"][0]["uncommitted"])
+            self.assertTrue(first["has_more"])
+            first_git = [
+                c["hash"]
+                for c in first["commits"]
+                if not c.get("uncommitted") and not c.get("stash")
+            ]
+            self.assertEqual(len(first_git), 3)
+            offset = len(first_git)
+            second = load_graph(paged, offset, 3)
+            second_git = [
+                c["hash"]
+                for c in second["commits"]
+                if not c.get("uncommitted") and not c.get("stash")
+            ]
+            self.assertEqual(len(second_git), 3)
+            self.assertFalse(set(first_git) & set(second_git))
+            full = load_graph(paged, 0, 100)
+            all_git = [
+                c["hash"]
+                for c in full["commits"]
+                if not c.get("uncommitted") and not c.get("stash")
+            ]
+            self.assertEqual(second_git, all_git[offset : offset + 3])
 
             bogus = root / "notgit"
             bogus.mkdir()

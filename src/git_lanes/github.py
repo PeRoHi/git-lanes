@@ -487,6 +487,12 @@ def clone_named(name_with_owner: str) -> dict:
         raise GitError("invalid repo name")
     parent = clone_parent()
     folder = parent / nwo.split("/")[-1]
+    try:
+        is_link = folder.is_symlink()
+    except OSError:
+        is_link = False
+    if is_link:
+        raise GitError("folder exists and is not a git repository")
     if folder.exists():
         if is_work_tree(folder):
             rec = upsert_repo(toplevel(folder), select=True)
